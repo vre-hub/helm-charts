@@ -1,6 +1,6 @@
 apiVersion: v2
 name: cern-vre
-version: 0.1.0-dev0
+version: 0.1.0-dev1
 description: The Virtual Research Environment developed at CERN.>
 keywords:
   - jupyterhub
