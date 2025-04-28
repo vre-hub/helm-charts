@@ -9,7 +9,6 @@ metadata:
     meta.helm.sh/release-namespace: reana
     traefik.frontend.entryPoints: http,https
   name: reana-ingress
-  namespace: reana
 spec:
   ingressClassName: traefik
   tls:
