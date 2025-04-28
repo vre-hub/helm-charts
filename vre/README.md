@@ -1,6 +1,6 @@
 # cern-vre
 
-![Version: 0.1.0-dev1](https://img.shields.io/badge/Version-0.1.0--dev1-informational?style=flat-square) ![AppVersion: 0.1.0](https://img.shields.io/badge/AppVersion-0.1.0-informational?style=flat-square)
+![Version: 0.1.0-dev2](https://img.shields.io/badge/Version-0.1.0--dev2-informational?style=flat-square) ![AppVersion: 0.1.0](https://img.shields.io/badge/AppVersion-0.1.0-informational?style=flat-square)
 
 The Virtual Research Environment developed at CERN.>
 
