@@ -5,14 +5,12 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
     ingress.kubernetes.io/ssl-redirect: "true"
-    meta.helm.sh/release-name: reana
-    meta.helm.sh/release-namespace: reana
     traefik.frontend.entryPoints: http,https
-  name: reana-ingress
+  name: {{ .Release.Name }}-ingress
 spec:
   ingressClassName: traefik
   tls:
-  - secretName: cert-manager-tls-ingress-secret-reana
+  - secretName: cert-manager-tls-ingress-secret-{{ .Release.Name }}-reana
     hosts:
     - {{ .Values.reana.reana_hostname }}
   rules:
@@ -21,21 +19,21 @@ spec:
       paths:
       - backend:
           service:
-            name: reana-server
+            name: {{ .Release.Name }}-server
             port:
               number: 80
         path: /api
         pathType: Prefix
       - backend:
           service:
-            name: reana-server
+            name: {{ .Release.Name }}-server
             port:
               number: 80
         path: /oauth
         pathType: Prefix
       - backend:
           service:
-            name: reana-ui
+            name: {{ .Release.Name }}-ui
             port:
               number: 80
         path: /
