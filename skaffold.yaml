@@ -1,0 +1,12 @@
+apiVersion: skaffold/v4beta12
+kind: Config
+metadata:
+  name: cern-vre
+deploy:
+  helm:
+    releases:
+      - name: cern-vre
+        chartPath: vre
+        valuesFiles:
+          - vre/values.yaml
+        version: 0.1.0-dev0
