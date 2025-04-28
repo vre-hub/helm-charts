@@ -1,6 +1,6 @@
 apiVersion: v2
-name: CERN VRE
-version: 0.1.0a0
+name: cern-vre
+version: 0.1.0-dev0
 description: The Virtual Research Environment developed at CERN.>
 keywords:
   - jupyterhub
@@ -12,7 +12,7 @@ sources:
 
 dependencies:
   - name: jupyterhub
-    version: 3.3.7 
+    version: 3.3.7
     repository: https://hub.jupyter.org/helm-chart
     condition: jupyterhub.enabled
 
@@ -21,16 +21,26 @@ dependencies:
     repository: https://reanahub.github.io/reana
     condition: reana.enabled
 
-  # TODO: add NFS provisioner and configure reana with it
+  - name: postgresql
+    version: 16.5.1
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: reana.postgres.enabled
+
+  - name: nfs-server-provisioner
+    condition: nfs-server-provisioner.enabled
+    version: 1.8.0
+    repository: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner
+
+  # TODO: add prometheus and grafana
 
   # TODO: eventually add an integrated rucio chart, https://github.com/rucio/helm-charts/pull/217
-  - name: rucio
-    version: 
-    repository: 
-    condition: rucio.enabled
+  # - name: rucio
+  #   version:
+  #   repository:
+  #   condition: rucio.enabled
 
-maintainers: 
-  - name: 
+maintainers:
+  - name: The maintainer name (required for each maintainer)
     email: The maintainers email (optional for each maintainer)
     url: A URL for the maintainer (optional for each maintainer)
 
