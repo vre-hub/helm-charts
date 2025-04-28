@@ -6,7 +6,7 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt
     ingress.kubernetes.io/ssl-redirect: "true"
     traefik.frontend.entryPoints: http,https
-  name: {{ .Release.Name }}-ingress
+  name: {{ .Release.Name }}-reana-ingress
 spec:
   ingressClassName: traefik
   tls:
