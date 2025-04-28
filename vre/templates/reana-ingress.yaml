@@ -5,12 +5,14 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
     ingress.kubernetes.io/ssl-redirect: "true"
+    meta.helm.sh/release-name: reana
+    meta.helm.sh/release-namespace: reana
     traefik.frontend.entryPoints: http,https
   name: {{ .Release.Name }}-reana-ingress
 spec:
   ingressClassName: traefik
   tls:
-  - secretName: cert-manager-tls-ingress-secret-{{ .Release.Name }}-reana
+  - secretName: cert-manager-tls-ingress-secret-reana
     hosts:
     - {{ .Values.reana.reana_hostname }}
   rules:
