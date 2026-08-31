@@ -13,9 +13,6 @@ bootstrap:
   reanaAdminEmail:
   reanaAdminPassword:
 
-multiRI:
-  enabled: false
-
 jupyterhub:
   enabled: true
 
@@ -43,7 +40,9 @@ jupyterhub:
         authorize_url: https://iam-escape.cloud.cnaf.infn.it/authorize
         token_url: https://iam-escape.cloud.cnaf.infn.it/token
         userdata_url: https://iam-escape.cloud.cnaf.infn.it/userinfo
-        oauth_callback_url: https://jhub-vre.obsuks4.unige.ch/hub/oauth_callback
+        # Required: https://<jupyterhub.ingress.hosts[0]>/hub/oauth_callback,
+        # registered as a redirect URI in the IAM client above.
+        oauth_callback_url:
         username_key: preferred_username
         enable_auth_state: true
         allow_all: true
@@ -132,11 +131,16 @@ jupyterhub:
     storage:
       capacity: 100Gi
 
+      # NOTE: these lists are subchart values, so they replace wholesale when
+      # overridden - if you add a volume in your local values file you must
+      # copy the full lists, INCLUDING the rucio/conda hook entries below
+      # (see values-custom-example.yaml for a ready-to-copy block).
+      # To mount an rclone remote (RcloneMount.enabled), add a volume whose
+      # claimName matches RcloneMount.pvcName, typically mounted at /data:
+      # the rucio-jupyterlab extension expects the default RSE there
+      # (RUCIO_RSE_MOUNT_PATH) when RUCIO_MODE is "replica".
       extraVolumes:
         # Arbitrary key for identity & ordering
-      - name: jupyterhub-shared
-        persistentVolumeClaim:
-          claimName: data-rclone-pvc
       - name: rucio-client-setup
         configMap:
           name: rucio-client-setup
@@ -147,9 +151,6 @@ jupyterhub:
           defaultMode: 0o755
       extraVolumeMounts:
         # Arbitrary key for identity & ordering
-      - name: jupyterhub-shared
-        mountPath: /data
-        readOnly: true
       - name: rucio-client-setup
         mountPath: /hooks/rucio
       - name: conda-setup
@@ -161,13 +162,22 @@ jupyterhub:
       pullPolicy: Always
 
 
+    # Spawn profiles offered to users. Each entry is a named delta against the
+    # base singleuser.* configuration: kubespawner_override patches only the
+    # listed keys, everything else (extraEnv, storage, lifecycle hooks, ...)
+    # is inherited. An entry without kubespawner_override spawns singleuser.image.
+    # NOTE: kubespawner_override uses raw kubespawner syntax: image is a single
+    # "name:tag" string (unlike singleuser.image) and the pull policy key is
+    # image_pull_policy. The prePuller also pre-pulls override images.
     profileList:
       - display_name: "Default environment"
         description: "Based on a scipy notebook environment with a python-3.11 kernel, the rucio jupyterlab extension and the reana client installed."
         default: true
-      - display_name: "Default environment, multi-RI rucio 39.2"
-        description: "Based on a scipy notebook environment with a python-3.11 kernel, the rucio jupyterlab extension and the reana client installed."
-        default: false
+      # - display_name: "My community environment"
+      #   description: "Community-specific image."
+      #   kubespawner_override:
+      #     image: ghcr.io/my-org/my-community-image:1.2.3
+      #     image_pull_policy: IfNotPresent
 
     # nodeSelector:
     #   jupyter: singleuser
@@ -182,34 +192,60 @@ jupyterhub:
 
     cmd: null
     extraEnv:
-      # RUCIO ENV variables, some are used by rucio-client-setup-configmap.yaml, some by jupyter extension
-      RUCIO_BASE_URL: "https://et-rucio-server.to.infn.it"
-      RUCIO_AUTH_URL: "https://et-rucio-server.to.infn.it"
-      RUCIO_OIDC_AUTH: "env"
-      RUCIO_OIDC_ENV_NAME: "RUCIO_ACCESS_TOKEN"
-      RUCIO_OIDC_AUDIENCE: "rucio"
-      RUCIO_OIDC_POLLING: "true"
-      RUCIO_OIDC_REFRESH_ACTIVATE: "true"
-      RUCIO_OIDC_ISSUER: "et-indigo-iam"
-      RUCIO_OIDC_SCOPE: "openid profile offline_access storage.read:/ storage.modify:/"
-      RUCIO_DEFAULT_AUTH_TYPE: "oidc"
-      RUCIO_OAUTH_ID: "rucio"
-      RUCIO_DESTINATION_RSE: "LOUVAIN"
+      # --- rucio-jupyterlab extension configuration -------------------------
+      # The extension itself is NOT configured by environment variables: it
+      # reads RucioConfig.instances from ~/.jupyter/jupyter_server_config.json
+      # (see https://github.com/rucio/jupyterlab-extension, config/schema.py).
+      # The singleuser image (vre-singleuser-py311 and images derived from it)
+      # runs configure-vre.py at container startup, which maps the RUCIO_*
+      # variables below into that file - so this is the image's interface, not
+      # the extension's (see https://github.com/vre-hub/environments).
+      # The rucio CLI is configured separately by the rucioClientSetup
+      # postStart hook (see rucioClientSetup below), which reads only
+      # RUCIO_BASE_URL, RUCIO_AUTH_URL and RUCIO_DEFAULT_AUTH_TYPE from here.
+      #
+      # Required: base and auth URLs of the Rucio server for this deployment.
+      RUCIO_BASE_URL: ""
+      RUCIO_AUTH_URL: ""
+      # Instance name and labels shown by the jupyterlab extension
+      RUCIO_NAME: ""
+      RUCIO_DISPLAY_NAME: ""
+      RUCIO_SITE_NAME: ""
+      # Default RSE for uploads via the jupyterlab extension, and where the
+      # extension expects that RSE to be mounted in the notebook filesystem
+      RUCIO_DESTINATION_RSE: ""
       RUCIO_RSE_MOUNT_PATH: "/data"
+      # replica: browse files on the mounted RSE; download: fetch to local disk
       RUCIO_MODE: "replica"
       RUCIO_WILDCARD_ENABLED: "1"
-      RUCIO_NAME: "et-rucio-server.to.infn.it"
-      RUCIO_DISPLAY_NAME: "RUCIO - ETAP VRE"
-      RUCIO_SITE_NAME: "ETAP"
-      RUCIO_MULTI_HOST_COMMANDS: "whoami, ping, list, download"
-      RUCIO_MULTI_HOST_SERVERS: "ET server, CE server"
+      # Auth type preselected in the extension; also reused as auth_type in the
+      # rucio CLI config written by the postStart hook
+      RUCIO_DEFAULT_AUTH_TYPE: "oidc"
+      # Intended token source for the extension: the hub authenticator exchanges
+      # the login token and injects it as RUCIO_ACCESS_TOKEN (see extraConfig
+      # token-exchange above). NOTE: configure-vre.py currently does NOT map
+      # these two into the extension config (the lines are commented out
+      # there); they are kept as documentation of the intended wiring and will
+      # take effect if the image restores the mapping.
+      RUCIO_OIDC_AUTH: "env"
+      RUCIO_OIDC_ENV_NAME: "RUCIO_ACCESS_TOKEN"
+      # Further optional variables understood by configure-vre.py (defaults in
+      # the image): RUCIO_WEBUI_URL, RUCIO_CA_CERT, RUCIO_VO,
+      # RUCIO_REPLICATION_RULE_LIFETIME_DAYS, RUCIO_PATH_BEGINS_AT, and
+      # ATLAS_/CMS_/FCC_-prefixed families for its extra hardcoded instances.
 
-      # conda ENV variables, some are used by conda-setup-configmap.yaml
-      CONDA_ENV_NAME: "IGWN"
-      CONDA_ENV_SOURCE_URL: "https://computing.docs.ligo.org/conda/environments/linux-aarch64/igwn.yaml"
-      CONDA_PKGS_EXCLUDE: "_x86_64-microarch-level=3=3_haswell"
+      # conda ENV variables used by conda-setup-configmap.yaml.
+      # The conda baseline setup (user-writable env/pkgs dirs, .condarc, conda init)
+      # always runs when condaSetup is enabled. To additionally provision a named
+      # conda environment, set BOTH CONDA_ENV_NAME and CONDA_ENV_SOURCE_URL
+      # (e.g. in your local values file).
+      CONDA_ENV_NAME: ""
+      CONDA_ENV_SOURCE_URL: ""
+      # Optional grep -E pattern of packages to exclude from the environment file
+      CONDA_PKGS_EXCLUDE: ""
 
       # HSF CDB client ENV variables
+      # NOTE: assumes the release is named "escape-vre"; keep in sync with npdb.hosts
       NOPAYLOADDB_URL: "http://escape-vre-npdb-nginx"
       NOPAYLOADDB_FILES_URL: "http://escape-vre-npdb-nginx"
       NOPAYLOADDB_SOURCE_NAME: "Escape VRE HSF CDB" # recommended in case of multiple instances
@@ -258,9 +294,12 @@ reana:
         consumer_key:
         consumer_secret:
 
-    database:
-      user:
-      password:
+    # Initial credentials for the REANA database when installed by the reana-db
+    # subchart. Left unset following upstream reana convention: the subchart's
+    # secret template falls back to reana/reana (dev convenience). Production
+    # deployments should manage the `<release-name>-db-secrets` Kubernetes
+    # secret directly instead of setting credentials in values files.
+    database: {}
 
   components:
     reana_ui:
@@ -299,11 +338,16 @@ reana:
 
   ingress_override: true
 
-  reana_hostname: "reana-vre.obsuks4.unige.ch"
+  # Required: domain name for the REANA ingress. REANA generates its OIDC
+  # redirect URI from this (https://<reana_hostname>/oauth/authorized/keycloak/);
+  # register it in your IAM client.
+  reana_hostname:
 
   db_env_config:
-    REANA_DB_NAME: "postgres"
+    REANA_DB_NAME: "reana"
     REANA_DB_PORT: "5432"
+    # NOTE: assumes the release is named "escape-vre" (the reana-db service is
+    # named <release-name>-db). Override if you use a different release name.
     REANA_DB_HOST: "escape-vre-db"
     # There are two more environment variables that should be set in order
     # to connect to a database:
@@ -344,7 +388,9 @@ nfs-server-provisioner:
     storageClass: ""
     size: "10Gi"
   storageClass:
-
+    # NOTE: this name MUST start with the Helm release name (here "escape-vre")
+    # to be picked up by the reana-db and reana-shared-volume subcharts.
+    # Keep npdb.storage.payload.storageClass in sync.
     name: escape-vre-shared-volume-storage-class
     # name: reana-infrastructure-volume-storage-class
     mountOptions:
@@ -493,14 +539,65 @@ fluent-bit:
           tls.verify  off
 
 
+# Rucio client configuration for singleuser sessions (postStart hook script).
+# Enabled by default: every VRE is expected to have a Rucio server to talk to.
+# NOTE: if you disable this, you must also override
+# jupyterhub.singleuser.lifecycleHooks and the corresponding
+# extraVolumes/extraVolumeMounts, which reference this ConfigMap unconditionally
+# (subchart values cannot depend on parent-chart flags).
 rucioClientSetup:
-  enabled: false
+  enabled: true
   configMapName: rucio-client-setup
+  # OIDC settings written into the rucio CLI config (/opt/rucio/etc/rucio.cfg)
+  # by the postStart hook. These configure the CLI only - the jupyterlab
+  # extension is configured via the RUCIO_* variables in
+  # jupyterhub.singleuser.extraEnv above. The server URLs and auth_type are
+  # taken from RUCIO_BASE_URL/RUCIO_AUTH_URL/RUCIO_DEFAULT_AUTH_TYPE there,
+  # so they are defined once.
+  oidc:
+    # Required: issuer nickname of your IAM as configured in the Rucio server
+    # (e.g. "escape-iam")
+    issuer: ""
+    audience: "rucio"
+    scope: "openid profile offline_access storage.read:/ storage.modify:/"
+    polling: "true"
+    refreshActivate: "true"
+  # Multiple research infrastructures: additional Rucio servers for the CLI.
+  # Each entry gets its own rucio_N.cfg rendered into the ConfigMap, plus a
+  # multi_host_* stanza in rucio.cfg mapping labels to config files for the
+  # commands listed in multiHostCommands. The primary server always comes from
+  # extraEnv RUCIO_BASE_URL/RUCIO_AUTH_URL and is labelled with
+  # primaryServerLabel (falling back to RUCIO_NAME). Additional servers
+  # authenticate with the same exchanged token file by default.
+  # (This replaces the former multiRI.enabled flag and the
+  # RUCIO_MULTI_HOST_SERVERS/RUCIO_MULTI_HOST_COMMANDS env vars.)
+  multiHostCommands: "whoami, ping, list, download"
+  primaryServerLabel: ""
+  additionalServers: []
+  # - label: "RI-2 server"
+  #   baseUrl: "https://rucio.ri-2.example.org"
+  #   authUrl: "https://rucio-auth.ri-2.example.org"
+  #   # Optional: authType (default "oidc"), oidcIssuer (placeholder by default,
+  #   # unused with token-file auth)
 
+# Conda baseline setup for singleuser sessions (postStart hook script):
+# creates user-writable conda envs/pkgs dirs, .condarc and runs conda init,
+# so that users have a working conda. Optionally provisions a named environment
+# when CONDA_ENV_NAME and CONDA_ENV_SOURCE_URL are set (see singleuser.extraEnv).
+# NOTE: if you disable this, you must also override
+# jupyterhub.singleuser.lifecycleHooks and the corresponding
+# extraVolumes/extraVolumeMounts, which reference this ConfigMap unconditionally
+# (subchart values cannot depend on parent-chart flags).
 condaSetup:
-  enabled: false
+  enabled: true
   configMapName: conda-setup
 
+# Mount a remote (e.g. WebDAV) via the csi-rclone driver as a read-only PV/PVC
+# for singleuser sessions. Requires the csi-rclone CSI driver in the cluster.
+# NOTE: enabling this creates the PV/PVC only - to mount it in user pods you
+# must also add a volume with claimName matching pvcName to
+# jupyterhub.singleuser.storage.extraVolumes/extraVolumeMounts (full lists,
+# see values-custom-example.yaml; soft-checked in the post-install notes).
 RcloneMount:
   enabled: false
   pvName: data-rclone-pv
@@ -527,11 +624,17 @@ npdb:
     type: django
 
   hosts:
-    api: npdb-api
-    files: npdb-files
+    # Cluster-internal access through the npdb NGINX Service.
+    # NOTE: assumes the release is named "escape-vre" (the service is named
+    # <release-name>-npdb-nginx). Override if you use a different release name,
+    # and use distinct DNS names when enabling the ingress for external access.
+    api: escape-vre-npdb-nginx
+    files: escape-vre-npdb-nginx
 
   postgresql:
     enabled: true
+    nameOverride: npdb-postgresql
+    fullnameOverride: ""
     auth:
       username: cdb
       password: change-me
@@ -555,7 +658,7 @@ npdb:
       enabled: true
     authentication:
       requireForDownloads: false
-      userinfoUrl: https://iam-et.cloud.cnaf.infn.it/userinfo
+      userinfoUrl: https://iam-escape.cloud.cnaf.infn.it/userinfo
 
   storage:
     payload:

@@ -1,0 +1,23 @@
+{{ .Chart.Name }} {{ .Chart.Version }} deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+{{- if and .Values.jupyterhub.enabled .Values.jupyterhub.ingress.hosts }}
+
+JupyterHub: https://{{ first .Values.jupyterhub.ingress.hosts }}
+{{- end }}
+{{- if .Values.reana.reana_hostname }}
+REANA:      https://{{ .Values.reana.reana_hostname }}
+{{- end }}
+
+Redirect URIs to register in your IAM client(s):
+{{- if .Values.jupyterhub.enabled }}
+  - {{ .Values.jupyterhub.hub.config.RucioAuthenticator.oauth_callback_url }}
+{{- end }}
+{{- if .Values.reana.reana_hostname }}
+  - https://{{ .Values.reana.reana_hostname }}/oauth/authorized/keycloak/
+    (the "keycloak" path segment is fixed by reana-server regardless of reana.login[].name)
+{{- end }}
+{{- $warnings := include "escape-vre.warnings" . }}
+{{- if $warnings }}
+
+{{ $warnings -}}
+{{- end }}

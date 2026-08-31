@@ -29,12 +29,78 @@ The Virtual Research Environment developed at CERN.
 | oci://ghcr.io/paullaycock/charts | npdb | 0.4.3 |
 | oci://ghcr.io/prometheus-community/charts | prometheus | 27.20.0 |
 
+## Deploying
+
+Generic defaults live in `values.yaml`; everything deployment-specific
+(identity-provider credentials and URLs, hostnames, Rucio instance, optional
+conda environment, storage) is collected in `values-custom-example.yaml`:
+
+```sh
+cp values-custom-example.yaml values-custom.yaml  # values-custom.yaml is gitignored
+# revise every value, then:
+helm dependency build
+helm install escape-vre . -n escape-vre --create-namespace \
+  -f values.yaml -f values-custom.yaml
+```
+
+Missing required values fail fast at render time (`templates/validation.yaml`);
+softer cross-value inconsistencies are reported as WARNING lines in the
+post-install notes (also shown by `skaffold run`).
+
+## Release name assumptions
+
+Several default values assume the Helm release is named `escape-vre`. Subchart
+values cannot reference the release name, so if you deploy under a different
+release name you must override all of the following consistently. These
+couplings (and identity-provider consistency) are soft-checked at deploy time:
+mismatches are reported as WARNING lines in the post-install notes (also shown
+in `skaffold run` output).
+
+| Value | Default | Constraint |
+|-------|---------|------------|
+| `nfs-server-provisioner.storageClass.name` | `escape-vre-shared-volume-storage-class` | MUST start with the release name to be picked up by the reana-db and reana-shared-volume subcharts |
+| `npdb.storage.payload.storageClass` | `escape-vre-shared-volume-storage-class` | Keep in sync with the storage class above |
+| `npdb.hosts.api` / `npdb.hosts.files` | `escape-vre-npdb-nginx` | The npdb NGINX service is named `<release-name>-npdb-nginx` |
+| `jupyterhub.singleuser.extraEnv.NOPAYLOADDB_URL` / `NOPAYLOADDB_FILES_URL` | `http://escape-vre-npdb-nginx` | Keep in sync with `npdb.hosts` |
+| `reana.db_env_config.REANA_DB_HOST` | `escape-vre-db` | The reana-db service is named `<release-name>-db` |
+
+## Rucio configuration: who consumes the `RUCIO_*` environment variables
+
+Two independent consumers exist, and neither is the rucio-jupyterlab extension
+itself:
+
+1. **The singleuser image's `configure-vre.py`** (from
+   [vre-hub/environments](https://github.com/vre-hub/environments), inherited
+   by derived images such as `vre-singleuser-et`). At container startup it maps
+   `RUCIO_NAME`, `RUCIO_DISPLAY_NAME`, `RUCIO_BASE_URL`, `RUCIO_AUTH_URL`,
+   `RUCIO_SITE_NAME`, `RUCIO_DESTINATION_RSE`, `RUCIO_RSE_MOUNT_PATH`,
+   `RUCIO_MODE`, `RUCIO_WILDCARD_ENABLED`, `RUCIO_DEFAULT_AUTH_TYPE` (and
+   optional `RUCIO_WEBUI_URL`, `RUCIO_CA_CERT`, `RUCIO_VO`, ...) into
+   `~/.jupyter/jupyter_server_config.json` (`RucioConfig.instances`), which is
+   what the [rucio-jupyterlab extension](https://github.com/rucio/jupyterlab-extension)
+   actually reads. Note that `configure-vre.py` currently does *not* map
+   `RUCIO_OIDC_AUTH`/`RUCIO_OIDC_ENV_NAME` (commented out there); the chart
+   keeps them in `extraEnv` to document the intended token source
+   (`RUCIO_ACCESS_TOKEN`, injected by the hub authenticator's token exchange).
+   It also defines extra hardcoded instances configurable via
+   `ATLAS_RUCIO_*`/`CMS_RUCIO_*`/`FCC_RUCIO_*` variables.
+2. **This chart's `rucioClientSetup` postStart hook**, which writes the rucio
+   CLI config `/opt/rucio/etc/rucio.cfg`. It reads only `RUCIO_ACCESS_TOKEN`,
+   `RUCIO_BASE_URL`, `RUCIO_AUTH_URL` and `RUCIO_DEFAULT_AUTH_TYPE` from the
+   environment; everything else (OIDC issuer/audience/scope, additional
+   multi-RI servers) is set under the `rucioClientSetup` value and rendered by
+   Helm. Additional servers in `rucioClientSetup.additionalServers` each get a
+   `rucio_N.cfg` plus a `multi_host_*` stanza in `rucio.cfg`.
+
+The server URLs are therefore defined once, in
+`jupyterhub.singleuser.extraEnv`, and shared by both consumers.
+
 ## Values
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | RcloneMount.capacity | string | `"10Gi"` |  |
-| RcloneMount.enabled | bool | `false` |  |
+| RcloneMount.enabled | bool | `false` | Create a read-only rclone-backed PV/PVC (requires the csi-rclone driver). To mount it in user pods, also add it to jupyterhub.singleuser.storage.extraVolumes/Mounts (see values-custom-example.yaml; soft-checked in post-install notes) |
 | RcloneMount.pvName | string | `"data-rclone-pv"` |  |
 | RcloneMount.pvcName | string | `"data-rclone-pvc"` |  |
 | RcloneMount.readOnly | bool | `true` |  |
@@ -55,7 +121,7 @@ The Virtual Research Environment developed at CERN.
 | bootstrap.reanaAdminEmail | string | `nil` |  |
 | bootstrap.reanaAdminPassword | string | `nil` |  |
 | condaSetup.configMapName | string | `"conda-setup"` |  |
-| condaSetup.enabled | bool | `false` |  |
+| condaSetup.enabled | bool | `true` | Conda baseline setup (writable env/pkgs dirs, .condarc, conda init) for singleuser sessions. Set CONDA_ENV_NAME and CONDA_ENV_SOURCE_URL to also provision a named env. |
 | crm.enabled | bool | `false` |  |
 | crm.namespace | string | `"monitoring"` |  |
 | fluent-bit.config.inputs | string | `"[INPUT]\n    Name tail\n    Path /var/log/containers/*.log\n    multiline.parser docker, cri\n    Tag kube.*\n    Mem_Buf_Limit 5MB\n    Buffer_Chunk_Size 1\n    Refresh_Interval 1\n    Skip_Long_Lines On\n"` |  |
@@ -75,7 +141,7 @@ The Virtual Research Environment developed at CERN.
 | jupyterhub.hub.config.RucioAuthenticator.client_id | string | `nil` |  |
 | jupyterhub.hub.config.RucioAuthenticator.client_secret | string | `nil` |  |
 | jupyterhub.hub.config.RucioAuthenticator.enable_auth_state | bool | `true` |  |
-| jupyterhub.hub.config.RucioAuthenticator.oauth_callback_url | string | `"https://jhub-vre.obsuks4.unige.ch/hub/oauth_callback"` |  |
+| jupyterhub.hub.config.RucioAuthenticator.oauth_callback_url | string | `nil` | Required: `https://<jupyterhub.ingress.hosts[0]>/hub/oauth_callback`, registered in your IAM client |
 | jupyterhub.hub.config.RucioAuthenticator.scope[0] | string | `"openid"` |  |
 | jupyterhub.hub.config.RucioAuthenticator.scope[1] | string | `"profile"` |  |
 | jupyterhub.hub.config.RucioAuthenticator.scope[2] | string | `"email"` |  |
@@ -100,31 +166,23 @@ The Virtual Research Environment developed at CERN.
 | jupyterhub.singleuser.cloudMetadata.blockWithIptables | bool | `false` |  |
 | jupyterhub.singleuser.cmd | string | `nil` |  |
 | jupyterhub.singleuser.defaultUrl | string | `"/lab"` |  |
-| jupyterhub.singleuser.extraEnv.CONDA_ENV_NAME | string | `"IGWN"` |  |
-| jupyterhub.singleuser.extraEnv.CONDA_ENV_SOURCE_URL | string | `"https://computing.docs.ligo.org/conda/environments/linux-aarch64/igwn.yaml"` |  |
-| jupyterhub.singleuser.extraEnv.CONDA_PKGS_EXCLUDE | string | `"_x86_64-microarch-level=3=3_haswell"` |  |
+| jupyterhub.singleuser.extraEnv.CONDA_ENV_NAME | string | `""` | Name of the optional conda env to provision; required when CONDA_ENV_SOURCE_URL is set |
+| jupyterhub.singleuser.extraEnv.CONDA_ENV_SOURCE_URL | string | `""` | URL of a conda environment file to provision at first login |
+| jupyterhub.singleuser.extraEnv.CONDA_PKGS_EXCLUDE | string | `""` | Optional grep -E pattern of packages to exclude from the environment file |
 | jupyterhub.singleuser.extraEnv.NOPAYLOADDB_FILES_URL | string | `"http://escape-vre-npdb-nginx"` |  |
 | jupyterhub.singleuser.extraEnv.NOPAYLOADDB_SOURCE_NAME | string | `"Escape VRE HSF CDB"` |  |
 | jupyterhub.singleuser.extraEnv.NOPAYLOADDB_URL | string | `"http://escape-vre-npdb-nginx"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_AUTH_URL | string | `"https://et-rucio-server.to.infn.it"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_BASE_URL | string | `"https://et-rucio-server.to.infn.it"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_DEFAULT_AUTH_TYPE | string | `"oidc"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_DESTINATION_RSE | string | `"LOUVAIN"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_DISPLAY_NAME | string | `"RUCIO - ETAP VRE"` |  |
+| jupyterhub.singleuser.extraEnv.RUCIO_AUTH_URL | string | `""` | Required: URL of the Rucio auth server (jupyterlab extension + rucio CLI) |
+| jupyterhub.singleuser.extraEnv.RUCIO_BASE_URL | string | `""` | Required: URL of the Rucio server (jupyterlab extension + rucio CLI) |
+| jupyterhub.singleuser.extraEnv.RUCIO_DEFAULT_AUTH_TYPE | string | `"oidc"` | Auth type preselected in the extension and used by the rucio CLI |
+| jupyterhub.singleuser.extraEnv.RUCIO_DESTINATION_RSE | string | `""` | Default RSE for uploads via the jupyterlab extension |
+| jupyterhub.singleuser.extraEnv.RUCIO_DISPLAY_NAME | string | `""` | Instance label shown by the jupyterlab extension |
 | jupyterhub.singleuser.extraEnv.RUCIO_MODE | string | `"replica"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_MULTI_HOST_COMMANDS | string | `"whoami, ping, list, download"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_MULTI_HOST_SERVERS | string | `"ET server, CE server"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_NAME | string | `"et-rucio-server.to.infn.it"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_OAUTH_ID | string | `"rucio"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_OIDC_AUDIENCE | string | `"rucio"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_OIDC_AUTH | string | `"env"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_OIDC_ENV_NAME | string | `"RUCIO_ACCESS_TOKEN"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_OIDC_ISSUER | string | `"et-indigo-iam"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_OIDC_POLLING | string | `"true"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_OIDC_REFRESH_ACTIVATE | string | `"true"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_OIDC_SCOPE | string | `"openid profile offline_access storage.read:/ storage.modify:/"` |  |
+| jupyterhub.singleuser.extraEnv.RUCIO_NAME | string | `""` | Rucio instance name used by the jupyterlab extension |
+| jupyterhub.singleuser.extraEnv.RUCIO_OIDC_AUTH | string | `"env"` | Intended extension token source (currently not mapped by configure-vre.py, see "Rucio configuration" above) |
+| jupyterhub.singleuser.extraEnv.RUCIO_OIDC_ENV_NAME | string | `"RUCIO_ACCESS_TOKEN"` | Intended extension token variable (see RUCIO_OIDC_AUTH) |
 | jupyterhub.singleuser.extraEnv.RUCIO_RSE_MOUNT_PATH | string | `"/data"` |  |
-| jupyterhub.singleuser.extraEnv.RUCIO_SITE_NAME | string | `"ETAP"` |  |
+| jupyterhub.singleuser.extraEnv.RUCIO_SITE_NAME | string | `""` | Site label shown by the jupyterlab extension |
 | jupyterhub.singleuser.extraEnv.RUCIO_WILDCARD_ENABLED | string | `"1"` |  |
 | jupyterhub.singleuser.image.name | string | `"ghcr.io/vre-hub/vre-singleuser-py311"` |  |
 | jupyterhub.singleuser.image.pullPolicy | string | `"Always"` |  |
@@ -135,27 +193,20 @@ The Virtual Research Environment developed at CERN.
 | jupyterhub.singleuser.networkPolicy.enabled | bool | `false` |  |
 | jupyterhub.singleuser.profileList[0].default | bool | `true` |  |
 | jupyterhub.singleuser.profileList[0].description | string | `"Based on a scipy notebook environment with a python-3.11 kernel, the rucio jupyterlab extension and the reana client installed."` |  |
-| jupyterhub.singleuser.profileList[0].display_name | string | `"Default environment"` |  |
-| jupyterhub.singleuser.profileList[1].default | bool | `false` |  |
-| jupyterhub.singleuser.profileList[1].description | string | `"Based on a scipy notebook environment with a python-3.11 kernel, the rucio jupyterlab extension and the reana client installed."` |  |
-| jupyterhub.singleuser.profileList[1].display_name | string | `"Default environment, multi-RI rucio 39.2"` |  |
+| jupyterhub.singleuser.profileList[0].display_name | string | `"Default environment"` | Entries without kubespawner_override use singleuser.image; add profiles with kubespawner_override.image ("name:tag" string) for community-specific environments |
 | jupyterhub.singleuser.startTimeout | int | `1200` |  |
 | jupyterhub.singleuser.storage.capacity | string | `"100Gi"` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[0].mountPath | string | `"/data"` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[0].name | string | `"jupyterhub-shared"` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[0].readOnly | bool | `true` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[1].mountPath | string | `"/hooks/rucio"` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[1].name | string | `"rucio-client-setup"` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[2].mountPath | string | `"/hooks/conda"` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[2].name | string | `"conda-setup"` |  |
-| jupyterhub.singleuser.storage.extraVolumes[0].name | string | `"jupyterhub-shared"` |  |
-| jupyterhub.singleuser.storage.extraVolumes[0].persistentVolumeClaim.claimName | string | `"data-rclone-pvc"` |  |
+| jupyterhub.singleuser.storage.extraVolumeMounts[0].mountPath | string | `"/hooks/rucio"` |  |
+| jupyterhub.singleuser.storage.extraVolumeMounts[0].name | string | `"rucio-client-setup"` |  |
+| jupyterhub.singleuser.storage.extraVolumeMounts[1].mountPath | string | `"/hooks/conda"` |  |
+| jupyterhub.singleuser.storage.extraVolumeMounts[1].name | string | `"conda-setup"` |  |
+| jupyterhub.singleuser.storage.extraVolumes | list | rucio and conda hook ConfigMaps | Replaces wholesale when overridden: copy the full list (including both hook entries) when adding volumes, e.g. for RcloneMount (see values-custom-example.yaml) |
+| jupyterhub.singleuser.storage.extraVolumes[0].configMap.defaultMode | int | `493` |  |
+| jupyterhub.singleuser.storage.extraVolumes[0].configMap.name | string | `"rucio-client-setup"` |  |
+| jupyterhub.singleuser.storage.extraVolumes[0].name | string | `"rucio-client-setup"` |  |
 | jupyterhub.singleuser.storage.extraVolumes[1].configMap.defaultMode | int | `493` |  |
-| jupyterhub.singleuser.storage.extraVolumes[1].configMap.name | string | `"rucio-client-setup"` |  |
-| jupyterhub.singleuser.storage.extraVolumes[1].name | string | `"rucio-client-setup"` |  |
-| jupyterhub.singleuser.storage.extraVolumes[2].configMap.defaultMode | int | `493` |  |
-| jupyterhub.singleuser.storage.extraVolumes[2].configMap.name | string | `"conda-setup"` |  |
-| jupyterhub.singleuser.storage.extraVolumes[2].name | string | `"conda-setup"` |  |
+| jupyterhub.singleuser.storage.extraVolumes[1].configMap.name | string | `"conda-setup"` |  |
+| jupyterhub.singleuser.storage.extraVolumes[1].name | string | `"conda-setup"` |  |
 | loki.backend.replicas | int | `0` |  |
 | loki.bloomCompactor.replicas | int | `0` |  |
 | loki.bloomGateway.replicas | int | `0` |  |
@@ -189,7 +240,6 @@ The Virtual Research Environment developed at CERN.
 | loki.singleBinary.replicas | int | `1` |  |
 | loki.test.enabled | bool | `false` |  |
 | loki.write.replicas | int | `0` |  |
-| multiRI.enabled | bool | `false` |  |
 | nfs-server-provisioner.enabled | bool | `true` |  |
 | nfs-server-provisioner.persistence.enabled | bool | `true` |  |
 | nfs-server-provisioner.persistence.size | string | `"10Gi"` |  |
@@ -207,10 +257,10 @@ The Virtual Research Environment developed at CERN.
 | npdb.django.replicas | int | `1` |  |
 | npdb.enabled | bool | `true` |  |
 | npdb.files.authentication.requireForDownloads | bool | `false` |  |
-| npdb.files.authentication.userinfoUrl | string | `"https://iam-et.cloud.cnaf.infn.it/userinfo"` |  |
+| npdb.files.authentication.userinfoUrl | string | `"https://iam-escape.cloud.cnaf.infn.it/userinfo"` |  |
 | npdb.files.upload.enabled | bool | `true` |  |
-| npdb.hosts.api | string | `"npdb-api"` |  |
-| npdb.hosts.files | string | `"npdb-files"` |  |
+| npdb.hosts.api | string | `"escape-vre-npdb-nginx"` | Assumes release name "escape-vre"; see [Release name assumptions](#release-name-assumptions) |
+| npdb.hosts.files | string | `"escape-vre-npdb-nginx"` | Assumes release name "escape-vre"; see [Release name assumptions](#release-name-assumptions) |
 | npdb.ingress.enabled | bool | `false` |  |
 | npdb.nginx.podSecurityContext.fsGroup | int | `101` |  |
 | npdb.pgbouncer.enabled | bool | `false` |  |
@@ -219,6 +269,8 @@ The Virtual Research Environment developed at CERN.
 | npdb.postgresql.auth.password | string | `"change-me"` |  |
 | npdb.postgresql.auth.username | string | `"cdb"` |  |
 | npdb.postgresql.enabled | bool | `true` |  |
+| npdb.postgresql.fullnameOverride | string | `""` |  |
+| npdb.postgresql.nameOverride | string | `"npdb-postgresql"` |  |
 | npdb.postgresql.primary.persistence.enabled | bool | `true` |  |
 | npdb.postgresql.primary.persistence.size | string | `"8Gi"` |  |
 | npdb.storage.payload.create | bool | `true` |  |
@@ -235,7 +287,7 @@ The Virtual Research Environment developed at CERN.
 | reana.components.reana_workflow_controller.imagePullPolicy | string | `"IfNotPresent"` |  |
 | reana.compute_backends[0] | string | `"kubernetes"` |  |
 | reana.db_env_config.REANA_DB_HOST | string | `"escape-vre-db"` |  |
-| reana.db_env_config.REANA_DB_NAME | string | `"postgres"` |  |
+| reana.db_env_config.REANA_DB_NAME | string | `"reana"` |  |
 | reana.db_env_config.REANA_DB_PORT | string | `"5432"` |  |
 | reana.debug.enabled | bool | `false` |  |
 | reana.enabled | bool | `true` |  |
@@ -253,9 +305,8 @@ The Virtual Research Environment developed at CERN.
 | reana.notifications.enabled | bool | `false` |  |
 | reana.quota.default_cpu_limit | int | `36000000` |  |
 | reana.quota.default_disk_limit | int | `10737418240` |  |
-| reana.reana_hostname | string | `"reana-vre.obsuks4.unige.ch"` |  |
-| reana.secrets.database.password | string | `nil` |  |
-| reana.secrets.database.user | string | `nil` |  |
+| reana.reana_hostname | string | `nil` | Required: REANA ingress host; register `https://<reana_hostname>/oauth/authorized/keycloak/` in your IAM client |
+| reana.secrets.database | object | `{}` | Unset = subchart falls back to dev defaults; in production manage the `<release-name>-db-secrets` secret directly |
 | reana.secrets.login.iam.consumer_key | string | `nil` |  |
 | reana.secrets.login.iam.consumer_secret | string | `nil` |  |
 | reana.shared_storage.access_modes | string | `"ReadWriteMany"` |  |
@@ -266,5 +317,13 @@ The Virtual Research Environment developed at CERN.
 | reana.workspaces.retention_rules.cronjob_schedule | string | `"0 2 * * *"` |  |
 | reana.workspaces.retention_rules.maximum_period | string | `"forever"` |  |
 | rucioClientSetup.configMapName | string | `"rucio-client-setup"` |  |
-| rucioClientSetup.enabled | bool | `false` |  |
+| rucioClientSetup.enabled | bool | `true` | Rucio client configuration for singleuser sessions. If disabled, also override jupyterhub.singleuser.lifecycleHooks and extraVolumes/extraVolumeMounts. |
+| rucioClientSetup.oidc.issuer | string | `""` | Required: issuer nickname of your IAM as configured in the Rucio server (written into the rucio CLI's rucio.cfg) |
+| rucioClientSetup.oidc.audience | string | `"rucio"` |  |
+| rucioClientSetup.oidc.scope | string | `"openid profile offline_access storage.read:/ storage.modify:/"` |  |
+| rucioClientSetup.oidc.polling | string | `"true"` |  |
+| rucioClientSetup.oidc.refreshActivate | string | `"true"` |  |
+| rucioClientSetup.multiHostCommands | string | `"whoami, ping, list, download"` | rucio CLI commands supporting multi-host selection when additionalServers is non-empty |
+| rucioClientSetup.primaryServerLabel | string | `""` | Multi-host label of the primary server (defaults to extraEnv RUCIO_NAME) |
+| rucioClientSetup.additionalServers | list | `[]` | Additional Rucio servers (multi-RI/VO) for the CLI; entries need label, baseUrl, authUrl (optional authType, oidcIssuer). Replaces the former multiRI.enabled + RUCIO_MULTI_HOST_* env vars. |
 

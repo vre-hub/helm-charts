@@ -21,3 +21,27 @@
 {{- if not .Values.reana.secrets.login.iam.consumer_secret }}
 {{- fail "reana.secrets.login.iam.consumer_secret must be set in values. It can be obtained from the identity provider: e.g. IAM or Keycloak." }}
 {{- end }}
+
+{{- if not .Values.jupyterhub.hub.config.RucioAuthenticator.oauth_callback_url }}
+{{- fail "jupyterhub.hub.config.RucioAuthenticator.oauth_callback_url must be set: https://<jupyterhub.ingress.hosts[0]>/hub/oauth_callback, registered as a redirect URI in your IAM client." }}
+{{- end }}
+
+{{- if not .Values.reana.reana_hostname }}
+{{- fail "reana.reana_hostname must be set. REANA's OIDC redirect URI will be https://<reana_hostname>/oauth/authorized/keycloak/ - register it in your IAM client." }}
+{{- end }}
+
+{{- if and .Values.jupyterhub.enabled .Values.jupyterhub.ingress.enabled (not .Values.jupyterhub.ingress.hosts) }}
+{{- fail "jupyterhub.ingress.hosts must contain at least one host. The oauth_callback_url is based on this host." }}
+{{- end }}
+
+{{- if and .Values.jupyterhub.enabled .Values.rucioClientSetup.enabled }}
+{{- if not .Values.jupyterhub.singleuser.extraEnv.RUCIO_BASE_URL }}
+{{- fail "jupyterhub.singleuser.extraEnv.RUCIO_BASE_URL must be set: URL of the Rucio server (used by the rucio-jupyterlab extension and the rucio client postStart hook)." }}
+{{- end }}
+{{- if not .Values.jupyterhub.singleuser.extraEnv.RUCIO_AUTH_URL }}
+{{- fail "jupyterhub.singleuser.extraEnv.RUCIO_AUTH_URL must be set: URL of the Rucio auth server (used by the rucio-jupyterlab extension and the rucio client postStart hook)." }}
+{{- end }}
+{{- if not .Values.rucioClientSetup.oidc.issuer }}
+{{- fail "rucioClientSetup.oidc.issuer must be set: issuer nickname of your IAM as configured in the Rucio server (written into the rucio CLI's rucio.cfg)." }}
+{{- end }}
+{{- end }}
