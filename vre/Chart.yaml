@@ -1,6 +1,6 @@
 apiVersion: v2
 name: escape-vre
-version: 0.1.0
+version: 0.3.0
 description: The Virtual Research Environment developed at CERN.
 keywords:
   - jupyterhub
@@ -11,6 +11,11 @@ sources:
   - https://github.com/vre-hub/vre
 
 dependencies:
+  - name: npdb
+    version: 0.4.3
+    repository: oci://ghcr.io/paullaycock/charts
+    condition: npdb.enabled
+
   - name: jupyterhub
     version: 3.3.7
     repository: https://hub.jupyter.org/helm-chart
@@ -18,7 +23,7 @@ dependencies:
 
   - name: reana
     # for the latest alpha version, not working with indigo IAM
-    # version: 0.95.0-alpha.2          
+    # version: 0.95.0-alpha.2
 
     # this is the latest stable version, has an issue with debug mode
     version: 0.9.4
@@ -28,25 +33,26 @@ dependencies:
     condition: nfs-server-provisioner.enabled
     version: 1.8.0
     repository: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner
-  
+
   - name: grafana
     condition: grafana.enabled
     version: 9.2.2
-    repository: https://grafana.github.io/helm-charts
+    repository: oci://ghcr.io/grafana-community/helm-charts
 
   - name: prometheus
     condition: prometheus.enabled
     version: 27.20.0
-    repository: https://prometheus-community.github.io/helm-charts
+    repository: oci://ghcr.io/prometheus-community/charts
 
   - name: loki
     condition: loki.enabled
     version: 6.30.1
-    repository: https://grafana.github.io/helm-charts
+    repository: oci://ghcr.io/grafana-community/helm-charts
 
   - name: fluent-bit
     version: 0.48.9
     condition: fluent-bit.enabled
+    # considered moving to oci://ghcr.io/fluent/helm-charts but they start at 0.5* - untested migration path
     repository: https://fluent.github.io/helm-charts
 
 

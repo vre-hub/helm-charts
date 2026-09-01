@@ -1,0 +1,54 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "escape-vre.fullname" . }}-pre-delete
+  annotations:
+    helm.sh/hook: pre-delete
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  activeDeadlineSeconds: 360
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: {{ include "escape-vre.fullname" . }}-bootstrap-sa
+      restartPolicy: Never
+      containers:
+        - name: shutdown-nfs-consumers
+          image: alpine/k8s:1.30.14
+          command:
+            - /bin/sh
+            - -ceu
+            - |
+              namespace="{{ .Release.Namespace }}"
+              release="{{ include "escape-vre.fullname" . }}"
+
+              for resource in \
+                "deployment/${release}-db" \
+                "deployment/${release}-server" \
+                "deployment/${release}-workflow-controller" \
+                "statefulset/${release}-message-broker" \
+                "deployment/${release}-npdb-nginx"
+              do
+                if kubectl -n "${namespace}" get "${resource}" >/dev/null 2>&1; then
+                  kubectl -n "${namespace}" scale "${resource}" --replicas=0
+                else
+                  echo "${resource} is already absent"
+                fi
+              done
+
+              kubectl -n "${namespace}" delete pods \
+                -l "app=jupyterhub,component=singleuser-server,release=${release}" \
+                --ignore-not-found --wait --timeout=300s
+
+              reana_selector="app in (${release}-db,${release}-server,${release}-workflow-controller,${release}-message-broker)"
+              npdb_selector="app.kubernetes.io/name=npdb,app.kubernetes.io/instance=${release},app.kubernetes.io/component=nginx"
+              pods="$(
+                kubectl -n "${namespace}" get pods -l "${reana_selector}" -o name
+                kubectl -n "${namespace}" get pods -l "${npdb_selector}" -o name
+              )"
+
+              if [ -n "${pods}" ]; then
+                kubectl -n "${namespace}" wait \
+                  --for=delete ${pods} \
+                  --timeout=300s
+              fi

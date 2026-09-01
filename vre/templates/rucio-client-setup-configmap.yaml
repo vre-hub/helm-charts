@@ -1,0 +1,72 @@
+{{- if .Values.rucioClientSetup.enabled }}
+{{- $rcs := .Values.rucioClientSetup }}
+{{- $servers := $rcs.additionalServers | default list }}
+{{- $primaryLabel := $rcs.primaryServerLabel | default .Values.jupyterhub.singleuser.extraEnv.RUCIO_NAME | default "default" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $rcs.configMapName }}
+  namespace: {{ .Release.Namespace }}
+data:
+{{- range $i, $server := $servers }}
+  {{ printf "rucio_%d.cfg" (add $i 2) }}: |
+    [client]
+    rucio_host = {{ required "rucioClientSetup.additionalServers entries need a baseUrl" $server.baseUrl | trimSuffix "/" }}
+    auth_host = {{ required "rucioClientSetup.additionalServers entries need an authUrl" $server.authUrl | trimSuffix "/" }}
+    auth_type = {{ $server.authType | default "oidc" }}
+    auth_token_file_path = /tmp/rucio_oauth.token
+    # the client requires an oidc_issuer value even when it authenticates
+    # with the already-exchanged token file above
+    oidc_issuer = {{ $server.oidcIssuer | default "unused" }}
+{{- end }}
+  postStart_rucio.sh: |
+    #!/bin/bash
+
+    set -eu
+    if [ "${SKIP_POSTSTART_HOOK:-false}" = "true" ]; then
+      echo "Rucio client setup skipped"
+    else
+      : "${RUCIO_ACCESS_TOKEN:?RUCIO_ACCESS_TOKEN is required}"
+      : "${RUCIO_BASE_URL:?RUCIO_BASE_URL is required}"
+      : "${RUCIO_AUTH_URL:?RUCIO_AUTH_URL is required}"
+
+      rucio_base_url="${RUCIO_BASE_URL%/}"
+      rucio_auth_url="${RUCIO_AUTH_URL%/}"
+      rucio_auth_token_file_path="/tmp/rucio_oauth.token"
+
+      mkdir -pv /certs /tmp
+      printf '%s' "${RUCIO_ACCESS_TOKEN}" > "${rucio_auth_token_file_path}"
+      chmod 600 "${rucio_auth_token_file_path}"
+      mkdir -pv /opt/rucio/etc
+
+      cat > /opt/rucio/etc/rucio.cfg <<EOL
+      [client]
+      rucio_host = ${rucio_base_url}
+      auth_host = ${rucio_auth_url}
+      auth_type = ${RUCIO_DEFAULT_AUTH_TYPE:-oidc}
+      oidc_audience = {{ $rcs.oidc.audience }}
+      oidc_polling = {{ $rcs.oidc.polling }}
+      auth_oidc_refresh_activate = {{ $rcs.oidc.refreshActivate }}
+      oidc_issuer = {{ required "rucioClientSetup.oidc.issuer must be set: issuer nickname of your IAM as configured in the Rucio server" $rcs.oidc.issuer }}
+      request_retries = 3
+      oidc_scope = {{ $rcs.oidc.scope }}
+      auth_token_file_path = ${rucio_auth_token_file_path}
+{{- if $servers }}
+      multi_host_commands = {{ $rcs.multiHostCommands }}
+      multi_host_servers = {{ $primaryLabel }}{{ range $servers }}, {{ required "rucioClientSetup.additionalServers entries need a label" .label }}{{ end }}
+
+      [{{ $primaryLabel }}]
+      config_file = /opt/rucio/etc/rucio.cfg
+{{- range $i, $server := $servers }}
+      [{{ $server.label }}]
+      config_file = /opt/rucio/etc/{{ printf "rucio_%d.cfg" (add $i 2) }}
+{{- end }}
+{{- end }}
+    EOL
+{{- if $servers }}
+
+      # additional server configs rendered by Helm into this ConfigMap
+      cp /hooks/rucio/rucio_*.cfg /opt/rucio/etc/
+{{- end }}
+    fi
+{{- end }}

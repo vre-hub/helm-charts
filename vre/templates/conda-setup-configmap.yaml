@@ -1,0 +1,67 @@
+{{- if .Values.condaSetup.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.condaSetup.configMapName }}
+  namespace: {{ .Release.Namespace }}
+data:
+  postStart_conda.sh: |
+    #!/bin/bash
+
+    set -eu
+
+    # --- Baseline setup: always runs, gives users a working conda ---
+    conda_envs_dir=/home/jovyan/.conda/envs
+    if [ ! -d "$conda_envs_dir" ]; then
+      mkdir -p "$conda_envs_dir"
+    fi
+
+    conda_pkgs_dir=/home/jovyan/.conda/pkgs
+    if [ ! -d "$conda_pkgs_dir" ]; then
+      mkdir -p "$conda_pkgs_dir"
+    fi
+
+    find "$conda_pkgs_dir" -type f -name '*.partial' -delete
+
+    cat > "$HOME/.condarc" <<EOL
+    pkgs_dirs:
+    - /home/jovyan/.conda/pkgs
+    envs_dirs:
+    - /home/jovyan/.conda/envs
+    EOL
+
+    conda init
+
+    profile_file="$HOME/.bash_profile"
+    touch "$profile_file"
+    sed -i '\|^source /home/jovyan/.bashrc$|d; /^conda activate /d' "$profile_file"
+    echo "source $HOME/.bashrc" >> "$profile_file"
+
+    # --- Optional: provision a named conda environment ---
+    if [ -n "${CONDA_ENV_SOURCE_URL:-}" ]; then
+      : "${CONDA_ENV_NAME:?CONDA_ENV_NAME must be set when CONDA_ENV_SOURCE_URL is given}"
+
+      if [ -d "$conda_envs_dir/${CONDA_ENV_NAME}" ]; then
+        echo "Conda environment already exists, skipping creation."
+      else
+        echo "Creating conda environment..."
+        wget "${CONDA_ENV_SOURCE_URL}" -O conda_env_original.yaml
+        if [ -n "${CONDA_PKGS_EXCLUDE:-}" ]; then
+          grep -vE "${CONDA_PKGS_EXCLUDE}" conda_env_original.yaml > conda_env.yaml
+        else
+          cp conda_env_original.yaml conda_env.yaml
+        fi
+
+        CONDA_DOWNLOAD_THREADS=1 CONDA_EXTRACT_THREADS=1 \
+          conda env create --file conda_env.yaml --name "${CONDA_ENV_NAME}" --quiet
+
+        jupyter kernelspec remove --force "${CONDA_ENV_NAME}" >/dev/null 2>&1 || true
+        conda run --name "${CONDA_ENV_NAME}" python -m pip install ipykernel
+        conda run --name "${CONDA_ENV_NAME}" python -m ipykernel install --user --name "${CONDA_ENV_NAME}" --display-name "${CONDA_ENV_NAME}"
+      fi
+
+      echo "conda activate ${CONDA_ENV_NAME}" >> "$profile_file"
+    else
+      echo "No conda env source configured (CONDA_ENV_SOURCE_URL is empty), skipping env creation."
+    fi
+{{- end }}

@@ -1,4 +1,7 @@
-# Before deploying, please revise and set all these values!
+# Example deployment-specific values for the escape-vre chart.
+# Copy this file (e.g. to values-custom.yaml, which is gitignored) and revise
+# every value before deploying. Anything not listed here has a generic default
+# in values.yaml.
 
 bootstrap:
   # Credentials for the initial admin user of REANA. These are used only during the first deployment.
@@ -17,33 +20,95 @@ jupyterhub:
         authorize_url: https://iam-et.cloud.cnaf.infn.it/authorize
         token_url: https://iam-et.cloud.cnaf.infn.it/token
         userdata_url: https://iam-et.cloud.cnaf.infn.it/userinfo
+        # -- Must be https://<jupyterhub.ingress.hosts[0]>/hub/oauth_callback
+        # and registered as a redirect URI in the IAM client above.
         oauth_callback_url: https://vre.example.local/hub/oauth_callback
     
   singleuser:
+    # -- To mount an rclone remote (RcloneMount.enabled below), uncomment and
+    # keep ALL entries: these lists replace the defaults wholesale, and the
+    # rucio/conda hook volumes are required by the postStart hooks. The
+    # jupyterhub-shared claimName must match RcloneMount.pvcName; /data is
+    # where the rucio-jupyterlab extension expects the default RSE
+    # (RUCIO_RSE_MOUNT_PATH) in "replica" mode.
+    # storage:
+    #   extraVolumes:
+    #   - name: jupyterhub-shared
+    #     persistentVolumeClaim:
+    #       claimName: data-rclone-pvc
+    #   - name: rucio-client-setup
+    #     configMap:
+    #       name: rucio-client-setup
+    #       defaultMode: 0o755
+    #   - name: conda-setup
+    #     configMap:
+    #       name: conda-setup
+    #       defaultMode: 0o755
+    #   extraVolumeMounts:
+    #   - name: jupyterhub-shared
+    #     mountPath: /data
+    #     readOnly: true
+    #   - name: rucio-client-setup
+    #     mountPath: /hooks/rucio
+    #   - name: conda-setup
+    #     mountPath: /hooks/conda
+
     extraEnv:
-      # -- These environment variables are used by the RucioAuthenticator to connect to RUCIO. They should be set according to the RUCIO instance you want to connect to. The example values are for the CERN VRE RUCIO instance, but they should be changed if you want to connect to a different RUCIO instance.
-      RUCIO_NAME: "vre-rucio.cern.ch"
-      RUCIO_DEFAULT_INSTANCE: "vre-rucio.cern.ch"
+      # -- Rucio instance for this deployment. These variables are consumed by
+      # configure-vre.py in the singleuser image, which writes the
+      # rucio-jupyterlab extension config; base and auth URLs are also reused
+      # by the rucio CLI postStart hook (see rucioClientSetup below).
       RUCIO_BASE_URL: "https://vre-rucio.cern.ch"
       RUCIO_AUTH_URL: "https://vre-rucio-auth.cern.ch"
-      RUCIO_WEBUI_URL: "https://vre-rucio-ui.cern.ch"
+      # Default RSE for uploads via the jupyterlab extension
+      RUCIO_DESTINATION_RSE: "CERN-EOS"
+      RUCIO_NAME: "vre-rucio.cern.ch"
       RUCIO_DISPLAY_NAME: "RUCIO - CERN VRE"
       RUCIO_SITE_NAME: "CERN"
+
+      # -- Optionally provision a named conda environment at first login.
+      # Both CONDA_ENV_NAME and CONDA_ENV_SOURCE_URL must be set together.
+      # CONDA_ENV_NAME: "IGWN"
+      # CONDA_ENV_SOURCE_URL: "https://computing.docs.ligo.org/conda/environments/linux-aarch64/igwn.yaml"
+      # CONDA_PKGS_EXCLUDE: "_x86_64-microarch-level=3=3_haswell"
+
+    # -- Spawn profiles: NOTE that this list wholesale-replaces the default in
+    # values.yaml. Entries without kubespawner_override use singleuser.image;
+    # kubespawner_override.image is a raw "name:tag" string.
+    # profileList:
+    #   - display_name: "Default environment"
+    #     description: "Scipy notebook with the rucio jupyterlab extension and the reana client."
+    #     default: true
+    #   - display_name: "My community environment"
+    #     description: "Community-specific image."
+    #     kubespawner_override:
+    #       image: ghcr.io/my-org/my-community-image:1.2.3
+    #       image_pull_policy: IfNotPresent
 
   ingress:
     ingressClassName: null
     hosts:
-    # -- Set the host for the JupyterHub ingress. This should be set to the domain name you want to use for accessing JupyterHub. 
-    # Note that callback URLs for authentication will be based on this domain.
+    # -- Set the host for the JupyterHub ingress. This should be set to the domain name you want to use for accessing JupyterHub.
+    # Keep RucioAuthenticator.oauth_callback_url above in sync with this host.
     - vre.example.local
 
-reana:
-  # Shared storage used by REANA jobs. This is used for storing input and output files of REANA workflows. It should be set according to the storage solution you want to use. The example values are for an NFS server provisioned by the nfs-server-provisioner subchart, but they can be changed if you want to use a different storage solution.
-  shared_storage:
-    backend: nfs
-    volume_size: 1
-    access_modes: ReadWriteMany
+# Rucio CLI configuration (rucio.cfg written by the postStart hook); server
+# URLs and auth type come from jupyterhub.singleuser.extraEnv above.
+rucioClientSetup:
+  oidc:
+    # -- Issuer nickname of your IAM as configured in the Rucio server
+    issuer: "escape-iam"
+  # -- Optional: additional Rucio servers (multi-RI/VO) for the CLI's
+  # multi-host support. Each entry gets its own rucio_N.cfg; the primary
+  # server (extraEnv RUCIO_BASE_URL) is labelled with primaryServerLabel,
+  # falling back to RUCIO_NAME.
+  # primaryServerLabel: "RI-1 server"
+  # additionalServers:
+  #   - label: "RI-2 server"
+  #     baseUrl: "https://rucio.ri-2.example.org"
+  #     authUrl: "https://rucio-auth.ri-2.example.org"
 
+reana:
   secrets:
     login:
       iam:
@@ -51,22 +116,27 @@ reana:
         consumer_key:
         consumer_secret:
 
-    # Initial credentials for the REANA database. These are used only during the first deployment if the DB is installed by the reana-db subchart.
-    database:
-      user: reana
-      password: reana
+    # REANA database credentials: unset = the reana subchart falls back to dev
+    # defaults. In production manage the `<release-name>-db-secrets` Kubernetes
+    # secret directly instead of setting credentials here.
+    # database:
+    #   user:
+    #   password:
 
+  # -- Domain name for the REANA ingress. REANA generates its OIDC callback
+  # from this: register https://<reana_hostname>/oauth/authorized/keycloak/
+  # as a redirect URI in your IAM client (the "keycloak" path segment is fixed
+  # by reana-server regardless of login[].name; only the first login provider
+  # is used).
   reana_hostname: "reana-vre.example.local"
 
-  db_env_config:
-    # These environment variables are used by REANA to connect to the database. They should be set according to the database you want to use. The example values are for a PostgreSQL database installed by the reana-db subchart, but they can be changed if you want to use a different database or a database installed outside of the cluster.
-    REANA_DB_NAME: "reana"
-    REANA_DB_PORT: "5432"
-    REANA_DB_HOST: "escape-vre-db"
-    # There are two more environment variables that should be set in order
-    # to connect to a database:
-    # REANA_DB_USERNAME: containing the database user name.
-    # REANA_DB_PASSWORD: containing the password for the user previously set.
+  # REANA database connection: defaults in values.yaml match the bootstrap job
+  # and the reana-db subchart. Uncomment and override only for an external DB
+  # or a different release name (see "Release name assumptions" in the README).
+  # NOTE: db_env_config must map to a dict — never leave it empty/null, that
+  # deletes the defaults.
+  # db_env_config:
+  #   REANA_DB_HOST: "my-external-db"
 
   # -- These settings are used to configure the login options for REANA. 
   login:
@@ -80,27 +150,21 @@ reana:
         token_url: "https://iam-et.cloud.cnaf.infn.it/token"
         userinfo_url: "https://iam-et.cloud.cnaf.infn.it/userinfo"
 
-  ingress:
-    enabled: false
-
-  traefik:
-    enabled: false
-
-  quota:
-    default_disk_limit: 10737418240  # bytes (10 GiB)
-    default_cpu_limit: 36000000      # milliseconds (10 hours)
-
-
 nfs-server-provisioner:
+  # Cluster-specific backing storage for the NFS server (e.g. "standard",
+  # "local-path", ...) and its size.
   persistence:
     storageClass: standard
     size: 100M
+  # NOTE: the exported storage class name (nfs-server-provisioner.storageClass.name)
+  # MUST start with the Helm release name; the default assumes "escape-vre".
+  # See "Release name assumptions" in the README.
 
-  storageClass:
-    # this name MUST start with helm release name (escape-vre in this case) to be picked up by the reana-db and reana-shared-volume subcharts
-    name: escape-vre-shared-volume-storage-class
-
-
-crm:
-  # namespace where grafana will discover dashboards
-  namespace: monitoring
+npdb:
+  postgresql:
+    auth:
+      password: replace-with-a-strong-password
+  files:
+    authentication:
+      # IAM userinfo endpoint used to authenticate npdb file access
+      userinfoUrl: https://iam-et.cloud.cnaf.infn.it/userinfo

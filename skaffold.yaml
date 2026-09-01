@@ -6,9 +6,10 @@ deploy:
   helm:
     releases:
       - name: escape-vre
+        namespace: escape-vre
+        createNamespace: true
         chartPath: vre
         valuesFiles:
          - vre/values.yaml
-       # copy vre/values-custom-example.yaml to vre/values-custom.yaml, set the necessary values, and uncomment this line
          - vre/values-custom.yaml
         version: 0.1.0-dev0

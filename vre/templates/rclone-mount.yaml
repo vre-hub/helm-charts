@@ -1,0 +1,51 @@
+{{- if .Values.RcloneMount.enabled }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .Values.RcloneMount.pvName }}
+  labels:
+    name: {{ .Values.RcloneMount.pvName }}
+spec:
+  accessModes:
+    - ReadOnlyMany
+  capacity:
+    storage: {{ .Values.RcloneMount.capacity }}
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: {{ .Values.RcloneMount.pvcName }}
+    namespace: {{ .Release.Namespace }}
+  csi:
+    driver: csi-rclone
+    readOnly: {{ .Values.RcloneMount.readOnly }}
+    volumeAttributes:
+      configData: |
+
+        [{{ .Values.RcloneMount.remoteName }}]
+
+        type = webdav
+        url = {{ required "RcloneMount.remoteUrl is required when RcloneMount is enabled" .Values.RcloneMount.remoteUrl }}
+        vendor = {{ .Values.RcloneMount.vendor }}
+      remote: {{ .Values.RcloneMount.remoteName }}
+      remotePath: {{ .Values.RcloneMount.remotePath | quote }}
+      vendor: {{ .Values.RcloneMount.vendor }}
+    volumeHandle: {{ .Values.RcloneMount.volumeHandle }}
+  persistentVolumeReclaimPolicy: {{ .Values.RcloneMount.reclaimPolicy }}
+  storageClassName: {{ .Values.RcloneMount.storageClassName }}
+  volumeMode: Filesystem
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.RcloneMount.pvcName }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: {{ .Values.RcloneMount.capacity }}
+  storageClassName: {{ .Values.RcloneMount.storageClassName }}
+  volumeMode: Filesystem
+  volumeName: {{ .Values.RcloneMount.pvName }}
+{{- end }}
