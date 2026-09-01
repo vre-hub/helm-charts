@@ -1,0 +1,81 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+## Deploying
+
+Generic defaults live in `values.yaml`; everything deployment-specific
+(identity-provider credentials and URLs, hostnames, Rucio instance, optional
+conda environment, storage) is collected in `values-custom-example.yaml`:
+
+```sh
+cp values-custom-example.yaml values-custom.yaml  # values-custom.yaml is gitignored
+# revise every value, then:
+helm dependency build
+helm install escape-vre . -n escape-vre --create-namespace \
+  -f values.yaml -f values-custom.yaml
+```
+
+Missing required values fail fast at render time (`templates/validation.yaml`);
+softer cross-value inconsistencies are reported as WARNING lines in the
+post-install notes (also shown by `skaffold run`).
+
+## Release name assumptions
+
+Several default values assume the Helm release is named `escape-vre`. Subchart
+values cannot reference the release name, so if you deploy under a different
+release name you must override all of the following consistently. These
+couplings (and identity-provider consistency) are soft-checked at deploy time:
+mismatches are reported as WARNING lines in the post-install notes (also shown
+in `skaffold run` output).
+
+| Value | Default | Constraint |
+|-------|---------|------------|
+| `nfs-server-provisioner.storageClass.name` | `escape-vre-shared-volume-storage-class` | MUST start with the release name to be picked up by the reana-db and reana-shared-volume subcharts |
+| `npdb.storage.payload.storageClass` | `escape-vre-shared-volume-storage-class` | Keep in sync with the storage class above |
+| `npdb.hosts.api` / `npdb.hosts.files` | `escape-vre-npdb-nginx` | The npdb NGINX service is named `<release-name>-npdb-nginx` |
+| `jupyterhub.singleuser.extraEnv.NOPAYLOADDB_URL` / `NOPAYLOADDB_FILES_URL` | `http://escape-vre-npdb-nginx` | Keep in sync with `npdb.hosts` |
+| `reana.db_env_config.REANA_DB_HOST` | `escape-vre-db` | The reana-db service is named `<release-name>-db` |
+
+## Rucio configuration: who consumes the `RUCIO_*` environment variables
+
+Two independent consumers exist, and neither is the rucio-jupyterlab extension
+itself:
+
+1. **The singleuser image's `configure-vre.py`** (from
+   [vre-hub/environments](https://github.com/vre-hub/environments), inherited
+   by derived images such as `vre-singleuser-et`). At container startup it maps
+   `RUCIO_NAME`, `RUCIO_DISPLAY_NAME`, `RUCIO_BASE_URL`, `RUCIO_AUTH_URL`,
+   `RUCIO_SITE_NAME`, `RUCIO_DESTINATION_RSE`, `RUCIO_RSE_MOUNT_PATH`,
+   `RUCIO_MODE`, `RUCIO_WILDCARD_ENABLED`, `RUCIO_DEFAULT_AUTH_TYPE` (and
+   optional `RUCIO_WEBUI_URL`, `RUCIO_CA_CERT`, `RUCIO_VO`, ...) into
+   `~/.jupyter/jupyter_server_config.json` (`RucioConfig.instances`), which is
+   what the [rucio-jupyterlab extension](https://github.com/rucio/jupyterlab-extension)
+   actually reads. Note that `configure-vre.py` currently does *not* map
+   `RUCIO_OIDC_AUTH`/`RUCIO_OIDC_ENV_NAME` (commented out there); the chart
+   keeps them in `extraEnv` to document the intended token source
+   (`RUCIO_ACCESS_TOKEN`, injected by the hub authenticator's token exchange).
+   It also defines extra hardcoded instances configurable via
+   `ATLAS_RUCIO_*`/`CMS_RUCIO_*`/`FCC_RUCIO_*` variables.
+2. **This chart's `rucioClientSetup` postStart hook**, which writes the rucio
+   CLI config `/opt/rucio/etc/rucio.cfg`. It reads only `RUCIO_ACCESS_TOKEN`,
+   `RUCIO_BASE_URL`, `RUCIO_AUTH_URL` and `RUCIO_DEFAULT_AUTH_TYPE` from the
+   environment; everything else (OIDC issuer/audience/scope, additional
+   multi-RI servers) is set under the `rucioClientSetup` value and rendered by
+   Helm. Additional servers in `rucioClientSetup.additionalServers` each get a
+   `rucio_N.cfg` plus a `multi_host_*` stanza in `rucio.cfg`.
+
+The server URLs are therefore defined once, in
+`jupyterhub.singleuser.extraEnv`, and shared by both consumers.
+
+{{ template "chart.valuesSection" . }}

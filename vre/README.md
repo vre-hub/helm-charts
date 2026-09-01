@@ -141,7 +141,7 @@ The server URLs are therefore defined once, in
 | jupyterhub.hub.config.RucioAuthenticator.client_id | string | `nil` |  |
 | jupyterhub.hub.config.RucioAuthenticator.client_secret | string | `nil` |  |
 | jupyterhub.hub.config.RucioAuthenticator.enable_auth_state | bool | `true` |  |
-| jupyterhub.hub.config.RucioAuthenticator.oauth_callback_url | string | `nil` | Required: `https://<jupyterhub.ingress.hosts[0]>/hub/oauth_callback`, registered in your IAM client |
+| jupyterhub.hub.config.RucioAuthenticator.oauth_callback_url | string | `nil` | Required: `https://<jupyterhub.ingress.hosts[0]>/hub/oauth_callback`, registered as a redirect URI in the IAM client above |
 | jupyterhub.hub.config.RucioAuthenticator.scope[0] | string | `"openid"` |  |
 | jupyterhub.hub.config.RucioAuthenticator.scope[1] | string | `"profile"` |  |
 | jupyterhub.hub.config.RucioAuthenticator.scope[2] | string | `"email"` |  |
@@ -168,7 +168,7 @@ The server URLs are therefore defined once, in
 | jupyterhub.singleuser.defaultUrl | string | `"/lab"` |  |
 | jupyterhub.singleuser.extraEnv.CONDA_ENV_NAME | string | `""` | Name of the optional conda env to provision; required when CONDA_ENV_SOURCE_URL is set |
 | jupyterhub.singleuser.extraEnv.CONDA_ENV_SOURCE_URL | string | `""` | URL of a conda environment file to provision at first login |
-| jupyterhub.singleuser.extraEnv.CONDA_PKGS_EXCLUDE | string | `""` | Optional grep -E pattern of packages to exclude from the environment file |
+| jupyterhub.singleuser.extraEnv.CONDA_PKGS_EXCLUDE | string | `""` | Optional `grep -E` pattern of packages to exclude from the environment file |
 | jupyterhub.singleuser.extraEnv.NOPAYLOADDB_FILES_URL | string | `"http://escape-vre-npdb-nginx"` |  |
 | jupyterhub.singleuser.extraEnv.NOPAYLOADDB_SOURCE_NAME | string | `"Escape VRE HSF CDB"` |  |
 | jupyterhub.singleuser.extraEnv.NOPAYLOADDB_URL | string | `"http://escape-vre-npdb-nginx"` |  |
@@ -191,22 +191,11 @@ The server URLs are therefore defined once, in
 | jupyterhub.singleuser.lifecycleHooks.postStart.exec.command[1] | string | `"-c"` |  |
 | jupyterhub.singleuser.lifecycleHooks.postStart.exec.command[2] | string | `"bash /hooks/rucio/postStart_rucio.sh > /tmp/postStart_rucio.log 2>&1 || true\nbash /hooks/conda/postStart_conda.sh > /tmp/postStart_conda.log 2>&1 || true\n"` |  |
 | jupyterhub.singleuser.networkPolicy.enabled | bool | `false` |  |
-| jupyterhub.singleuser.profileList[0].default | bool | `true` |  |
-| jupyterhub.singleuser.profileList[0].description | string | `"Based on a scipy notebook environment with a python-3.11 kernel, the rucio jupyterlab extension and the reana client installed."` |  |
-| jupyterhub.singleuser.profileList[0].display_name | string | `"Default environment"` | Entries without kubespawner_override use singleuser.image; add profiles with kubespawner_override.image ("name:tag" string) for community-specific environments |
+| jupyterhub.singleuser.profileList | list | one default profile using singleuser.image | Entries without kubespawner_override use singleuser.image; add profiles with kubespawner_override.image ("name:tag" string) for community-specific environments |
 | jupyterhub.singleuser.startTimeout | int | `1200` |  |
 | jupyterhub.singleuser.storage.capacity | string | `"100Gi"` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[0].mountPath | string | `"/hooks/rucio"` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[0].name | string | `"rucio-client-setup"` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[1].mountPath | string | `"/hooks/conda"` |  |
-| jupyterhub.singleuser.storage.extraVolumeMounts[1].name | string | `"conda-setup"` |  |
+| jupyterhub.singleuser.storage.extraVolumeMounts | list | rucio and conda hook mount points | Replaces wholesale when overridden: copy the full list (including both hook entries) when adding mounts |
 | jupyterhub.singleuser.storage.extraVolumes | list | rucio and conda hook ConfigMaps | Replaces wholesale when overridden: copy the full list (including both hook entries) when adding volumes, e.g. for RcloneMount (see values-custom-example.yaml) |
-| jupyterhub.singleuser.storage.extraVolumes[0].configMap.defaultMode | int | `493` |  |
-| jupyterhub.singleuser.storage.extraVolumes[0].configMap.name | string | `"rucio-client-setup"` |  |
-| jupyterhub.singleuser.storage.extraVolumes[0].name | string | `"rucio-client-setup"` |  |
-| jupyterhub.singleuser.storage.extraVolumes[1].configMap.defaultMode | int | `493` |  |
-| jupyterhub.singleuser.storage.extraVolumes[1].configMap.name | string | `"conda-setup"` |  |
-| jupyterhub.singleuser.storage.extraVolumes[1].name | string | `"conda-setup"` |  |
 | loki.backend.replicas | int | `0` |  |
 | loki.bloomCompactor.replicas | int | `0` |  |
 | loki.bloomGateway.replicas | int | `0` |  |
@@ -316,14 +305,13 @@ The server URLs are therefore defined once, in
 | reana.workspaces.paths[0] | string | `"/var/reana:/var/reana"` |  |
 | reana.workspaces.retention_rules.cronjob_schedule | string | `"0 2 * * *"` |  |
 | reana.workspaces.retention_rules.maximum_period | string | `"forever"` |  |
+| rucioClientSetup.additionalServers | list | `[]` | Additional Rucio servers (multi-RI/VO) for the CLI; entries need label, baseUrl, authUrl (optional authType, oidcIssuer) |
 | rucioClientSetup.configMapName | string | `"rucio-client-setup"` |  |
 | rucioClientSetup.enabled | bool | `true` | Rucio client configuration for singleuser sessions. If disabled, also override jupyterhub.singleuser.lifecycleHooks and extraVolumes/extraVolumeMounts. |
-| rucioClientSetup.oidc.issuer | string | `""` | Required: issuer nickname of your IAM as configured in the Rucio server (written into the rucio CLI's rucio.cfg) |
+| rucioClientSetup.multiHostCommands | string | `"whoami, ping, list, download"` | rucio CLI commands supporting multi-host selection when additionalServers is non-empty |
 | rucioClientSetup.oidc.audience | string | `"rucio"` |  |
-| rucioClientSetup.oidc.scope | string | `"openid profile offline_access storage.read:/ storage.modify:/"` |  |
+| rucioClientSetup.oidc.issuer | string | `""` | Required: issuer nickname of your IAM as configured in the Rucio server (written into the rucio CLI's rucio.cfg) |
 | rucioClientSetup.oidc.polling | string | `"true"` |  |
 | rucioClientSetup.oidc.refreshActivate | string | `"true"` |  |
-| rucioClientSetup.multiHostCommands | string | `"whoami, ping, list, download"` | rucio CLI commands supporting multi-host selection when additionalServers is non-empty |
+| rucioClientSetup.oidc.scope | string | `"openid profile offline_access storage.read:/ storage.modify:/"` |  |
 | rucioClientSetup.primaryServerLabel | string | `""` | Multi-host label of the primary server (defaults to extraEnv RUCIO_NAME) |
-| rucioClientSetup.additionalServers | list | `[]` | Additional Rucio servers (multi-RI/VO) for the CLI; entries need label, baseUrl, authUrl (optional authType, oidcIssuer). Replaces the former multiRI.enabled + RUCIO_MULTI_HOST_* env vars. |
-
