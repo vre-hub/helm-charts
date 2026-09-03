@@ -8,10 +8,22 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: {{ include "escape-vre.fullname" . }}-bootstrap-sa
+      {{- with .Values.bootstrap.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
       - name: wait-for-db
         image: "{{ .Values.bootstrap.initImage.repository }}:{{ .Values.bootstrap.initImage.tag }}"
         imagePullPolicy: {{ .Values.bootstrap.initImage.pullPolicy }}
+        {{- with .Values.bootstrap.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.bootstrap.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         command: ["/bin/sh", "-c"]
         env:
         - name: PGUSER
@@ -40,17 +52,25 @@ spec:
       containers:
       - name: bootstrap
         image: "{{ .Values.bootstrap.image.repository }}:{{ .Values.bootstrap.image.tag }}"
-        imagePullPolicy: {{ .Values.bootstrap.imagePullPolicy }}  
+        imagePullPolicy: {{ .Values.bootstrap.image.pullPolicy }}
+        {{- with .Values.bootstrap.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.bootstrap.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         command: ["/bin/sh", "-c"]
         args:
         - |
-          set -ex
+          set -e
           echo "Bootstrapping REANA..."
           
           kubernetes_namespace={{ .Release.Namespace }}
           instance_name={{ include "escape-vre.fullname" . }}
-          admin_email={{ .Values.bootstrap.reanaAdminEmail | default "admin@example.com" }}
-          admin_password={{ .Values.bootstrap.reanaAdminPassword }}
+          admin_email={{ .Values.bootstrap.reanaAdminEmail | default "admin@example.com" | quote }}
+          admin_password={{ .Values.bootstrap.reanaAdminPassword | quote }}
 
           
           kubectl exec -it deployment/${instance_name}-server  -- ./scripts/create-database.sh || echo "Database already exists, skipping creation."
