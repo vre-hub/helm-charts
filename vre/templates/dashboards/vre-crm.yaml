@@ -119,9 +119,9 @@ data:
                 "uid": "prometheus"
               },
               "editorMode": "builder",
-              "expr": "container_memory_rss{namespace=\"{{.Values.crm.monitoried_namespace}}\", container=\"notebook\"}",
+              "expr": "container_memory_rss{namespace=\"{{ .Values.crm.monitored_namespace | default .Release.Namespace }}\", container=\"notebook\"}",
               "instant": true,
-              "legendFormat": "\{\{pod\}\}",
+              "legendFormat": "{{ "{{pod}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -218,9 +218,9 @@ data:
                 "uid": "prometheus"
               },
               "editorMode": "builder",
-              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"{{.Values.crm.monitored_namespace}}\", container=\"notebook\"}[$__rate_interval])",
+              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"{{ .Values.crm.monitored_namespace | default .Release.Namespace }}\", container=\"notebook\"}[$__rate_interval])",
               "instant": true,
-              "legendFormat": "\{\{pod\}\}",
+              "legendFormat": "{{ "{{pod}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -320,7 +320,7 @@ data:
               "editorMode": "builder",
               "expr": "container_memory_rss{namespace=\"etap\", container=\"workflow-engine\"}",
               "instant": true,
-              "legendFormat": "\{\{pod\}\}",
+              "legendFormat": "{{ "{{pod}}" }}",
               "range": true,
               "refId": "A"
             }
@@ -419,7 +419,7 @@ data:
               "editorMode": "builder",
               "expr": "container_cpu_usage_seconds_total{namespace=\"etap\", container=\"workflow-engine\"}",
               "instant": true,
-              "legendFormat": "\{\{pod\}\}",
+              "legendFormat": "{{ "{{pod}}" }}",
               "range": true,
               "refId": "A"
             }
