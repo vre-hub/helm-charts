@@ -59,6 +59,7 @@ deploy-with-version: set-version deploy
 
 # Run pre-commit hooks
 lint:
+    helm dependency update ./vre
     pre-commit run --all-files
 
 # Show current version

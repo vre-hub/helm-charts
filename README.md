@@ -95,7 +95,8 @@ just set-version
 # Show current chart version
 just show-version
 
-# Run pre-commit hooks
+# Fetch chart dependencies and run pre-commit hooks
+# (needs pre-commit, helm, kubeconform, trivy and python3 on PATH)
 just lint
 
 # Create local cluster, install ingress, and deploy

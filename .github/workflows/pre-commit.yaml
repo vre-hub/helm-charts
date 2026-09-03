@@ -22,13 +22,39 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: 'latest'
+          version: 'v4.2.3'
+
+      # vre/charts is gitignored, so there is nothing to render without this
+      - name: Cache chart dependencies
+        id: charts
+        uses: actions/cache@v4
+        with:
+          path: vre/charts
+          key: chart-deps-${{ hashFiles('vre/Chart.yaml') }}
+
+      - name: Fetch chart dependencies
+        if: steps.charts.outputs.cache-hit != 'true'
+        run: helm dependency update ./vre
 
       - name: Install kubeconform
         run: |
-          curl -L https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          set -o pipefail
+          curl -fsSL --retry 3 --retry-all-errors -o kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          echo "95f14e87aa28c09d5941f11bd024c1d02fdc0303ccaa23f61cef67bc92619d73  kubeconform.tar.gz" | sha256sum -c -
+          tar xzf kubeconform.tar.gz kubeconform
           sudo mv kubeconform /usr/local/bin/
           kubeconform -v
+
+      - name: Install trivy
+        run: |
+          set -o pipefail
+          curl -fsSL --retry 3 --retry-all-errors -o trivy.tar.gz \
+            https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_Linux-64bit.tar.gz
+          echo "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a  trivy.tar.gz" | sha256sum -c -
+          tar xzf trivy.tar.gz trivy
+          sudo mv trivy /usr/local/bin/
+          trivy --version
 
       - name: Run pre-commit
         uses: pre-commit/action@v3.0.1

@@ -1,0 +1,27 @@
+bootstrap:
+  reanaAdminEmail: lint@example.invalid
+  reanaAdminPassword: lint-only-not-a-real-password
+
+jupyterhub:
+  hub:
+    config:
+      RucioAuthenticator:
+        client_id: lint-only
+        client_secret: lint-only
+
+reana:
+  secrets:
+    login:
+      iam:
+        consumer_key: lint-only
+        consumer_secret: lint-only
+
+# the chart ships these disabled, render them so their values get linted
+grafana:
+  enabled: true
+prometheus:
+  enabled: true
+loki:
+  enabled: true
+fluent-bit:
+  enabled: true

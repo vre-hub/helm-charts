@@ -1,0 +1,10 @@
+# namespace is picked at install time, a chart cannot set it
+KSV-0110
+
+# registry comes from bootstrap.image, that is the operator's call
+KSV-0125
+
+# the bootstrap Job exists to exec into reana-server and stash the admin token,
+# so these two are the job, not a misconfiguration
+KSV-0053
+KSV-0113
