@@ -33,7 +33,7 @@ jobs:
       - name: Add Helm repositories
         run: |
           helm repo add jupyterhub https://hub.jupyter.org/helm-chart
-          helm repo add reana https://volodymyrss.github.io/reana
+          helm repo add reana https://reanahub.github.io/reana
           helm repo add nfs-ganesha https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner
           helm repo add grafana https://grafana.github.io/helm-charts
           helm repo add prometheus https://prometheus-community.github.io/helm-charts
