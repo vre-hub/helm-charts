@@ -52,7 +52,6 @@ dependencies:
 
 maintainers:
   - name: VRE Team
-    email: vre-team@example.com
     url: https://vre-hub.github.io
 
 icon: https://vre-hub.github.io/img/favicon.ico
