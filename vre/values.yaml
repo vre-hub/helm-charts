@@ -496,6 +496,10 @@ loki:
       lokiCanary:
         enabled: false
 
+  # -- the canary is controlled by this top-level key, the selfMonitoring one above no longer is
+  lokiCanary:
+    enabled: false
+
   minio:
     enabled: true
 
@@ -651,6 +655,9 @@ rcloneMount:
 crm:
   enabled: false
   namespace: monitoring
+  # -- Namespace the dashboard queries for singleuser and workflow pods.
+  # Defaults to the release namespace when empty.
+  monitored_namespace: ""
 
 npdb:
   enabled: true
