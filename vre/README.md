@@ -110,6 +110,7 @@ The server URLs are therefore defined once, in
 | bootstrap.reanaAdminPassword | string | `nil` |  |
 | condaSetup.configMapName | string | `"conda-setup"` |  |
 | crm.enabled | bool | `false` |  |
+| crm.monitored_namespace | string | `""` | Namespace the dashboard queries for singleuser and workflow pods. Defaults to the release namespace when empty. |
 | crm.namespace | string | `"monitoring"` |  |
 | fluent-bit.config.inputs | string | `"[INPUT]\n    Name tail\n    Path /var/log/containers/*.log\n    multiline.parser docker, cri\n    Tag kube.*\n    Mem_Buf_Limit 5MB\n    Buffer_Chunk_Size 1\n    Refresh_Interval 1\n    Skip_Long_Lines On\n"` |  |
 | fluent-bit.config.outputs | string | `"[FILTER]\n    Name grep\n    Match *\n\n[OUTPUT]\n    Name        loki\n    Match       *\n    Host        {{ .Release.Name }}-loki-gateway\n    port        80\n    tls         off\n    tls.verify  off\n"` |  |
@@ -204,6 +205,7 @@ The server URLs are therefore defined once, in
 | loki.loki.schemaConfig.configs[0].object_store | string | `"s3"` |  |
 | loki.loki.schemaConfig.configs[0].schema | string | `"v13"` |  |
 | loki.loki.schemaConfig.configs[0].store | string | `"tsdb"` |  |
+| loki.lokiCanary | object | `{"enabled":false}` | the canary is controlled by this top-level key, the selfMonitoring one above no longer is |
 | loki.minio.enabled | bool | `true` |  |
 | loki.monitoring.selfMonitoring.enabled | bool | `false` |  |
 | loki.monitoring.selfMonitoring.grafanaAgent.installOperator | bool | `false` |  |
