@@ -136,7 +136,21 @@ Even in a local cluster, you may want to use a real IAM instance. To do that, yo
 cp vre/values-custom-example.yaml vre/values-custom.yaml
 ```
 
+`client_id`, `client_secret`, `consumer_key` and `consumer_secret` are empty in the example. The deploy fails until you fill them in.
+
 #### Deploy VRE
+
+If you set `crm.enabled=true`, create the namespace the dashboard goes into first. The chart does not create it and the install fails if it is missing:
+
+```bash
+kubectl create namespace monitoring
+```
+
+If your cluster runs the ingress-nginx admission webhook, wait for its controller to be ready, otherwise it rejects the chart's Ingress objects:
+
+```bash
+kubectl wait --for=condition=Ready pod -l app.kubernetes.io/component=controller -n ingress-nginx --timeout=180s
+```
 
 ```bash
 # Using just (automatically sets version)
