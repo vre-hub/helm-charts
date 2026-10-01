@@ -651,6 +651,9 @@ rcloneMount:
 crm:
   enabled: false
   namespace: monitoring
+  # -- Namespace the dashboard queries for singleuser and workflow pods.
+  # Defaults to the release namespace when empty.
+  monitored_namespace: ""
 
 npdb:
   enabled: true
