@@ -10,7 +10,7 @@ The Virtual Research Environment developed at CERN.
 
 | Name | Email | Url |
 | ---- | ------ | --- |
-| VRE Team | <vre-team@example.com> | <https://vre-hub.github.io> |
+| VRE Team |  | <https://vre-hub.github.io> |
 
 ## Source Code
 
@@ -20,14 +20,14 @@ The Virtual Research Environment developed at CERN.
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://fluent.github.io/helm-charts | fluent-bit | 0.48.9 |
-| https://hub.jupyter.org/helm-chart | jupyterhub | 3.3.7 |
+| https://fluent.github.io/helm-charts | fluent-bit | 0.58.1 |
+| https://hub.jupyter.org/helm-chart | jupyterhub | 4.4.2 |
 | https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner | nfs-server-provisioner | 1.8.0 |
 | https://reanahub.github.io/reana | reana | 0.9.4 |
-| oci://ghcr.io/grafana-community/helm-charts | grafana | 9.2.2 |
-| oci://ghcr.io/grafana-community/helm-charts | loki | 6.30.1 |
+| oci://ghcr.io/grafana-community/helm-charts | grafana | 10.5.15 |
+| oci://ghcr.io/grafana-community/helm-charts | loki | 6.55.0 |
 | oci://ghcr.io/paullaycock/charts | npdb | 0.4.3 |
-| oci://ghcr.io/prometheus-community/charts | prometheus | 27.20.0 |
+| oci://ghcr.io/prometheus-community/charts | prometheus | 29.27.2 |
 
 ## Deploying
 
