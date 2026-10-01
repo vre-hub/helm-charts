@@ -58,19 +58,19 @@ The user has to be authorized manually. The email notification to the admin is n
 Get an admin access token (replace `<admin-email>` with the actual email):
 
 ```bash
-$ REANA_ACCESS_TOKEN=$(kubectl get secrets  escape-vre-admin-access-token -o 'jsonpath={.data.ADMIN_ACCESS_TOKEN}' | base64 -d)
+$ REANA_ACCESS_TOKEN=$(kubectl get secrets -n escape-vre escape-vre-admin-access-token -o 'jsonpath={.data.ADMIN_ACCESS_TOKEN}' | base64 -d)
 ```
 
 To list the users:
 
 ```bash
-$ kubectl exec -i -t deployment/escape-vre-server -- flask reana-admin user-list --admin-access-token $REANA_ACCESS_TOKEN
+$ kubectl exec -n escape-vre -i -t deployment/escape-vre-server -- flask reana-admin user-list --admin-access-token $REANA_ACCESS_TOKEN
 ```
 
 To authorize (the user had to try to connect beforehand):
 
 ```bash
-$ kubectl exec -i -t deployment/escape-vre-server -- flask reana-admin token-grant \
+$ kubectl exec -n escape-vre -i -t deployment/escape-vre-server -- flask reana-admin token-grant \
 --email user@example.com --admin-access-token $REANA_ACCESS_TOKEN
 ```
 The redirect URIs to be used in INDIGO IAM have to be:
@@ -98,9 +98,7 @@ just show-version
 # Run pre-commit hooks
 just lint
 
-# Create local cluster, install ingress, and deploy
-just create-cluster
-just install-ingress
+# Deploy (requires kubectl already pointing at your target cluster/context)
 just deploy-with-version
 ```
 
@@ -126,29 +124,9 @@ The version is automatically updated by:
 
 ### Setting up cluster
 
-#### Create a cluster
+Chart operations are done using [Skaffold](https://skaffold.dev/), which deploys to whatever cluster your current `kubectl` context points at. Any Kubernetes cluster works, including a local one such as [kind](https://kind.sigs.k8s.io/) or [k3d](https://k3d.io/) if you don't already have access to one - point `kubectl` at it before continuing.
 
-We recommend using [kind](https://kind.sigs.k8s.io/) to test the charts locally. Chart operations are done using [Skaffold](https://skaffold.dev/):
-
-```bash
-# Using just
-just create-cluster
-
-# Or manually
-kind create cluster --config dev/kind-config.yaml
-```
-
-#### Install an ingress controller
-
-The easiest and production-like way to access local VRE deployment is by installing a simple ingress controller. Production clusters will almost always already have one included.
-
-```bash
-# Using just
-just install-ingress
-
-# Or manually
-kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
-```
+If your cluster doesn't already have an ingress controller (production clusters will almost always already have one), install one appropriate for your cluster type.
 
 #### Customize local values
 

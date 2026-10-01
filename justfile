@@ -38,19 +38,8 @@ set-version:
     echo "Updated Chart.yaml:"
     grep "^version:" vre/Chart.yaml
 
-# Create a local cluster for testing
-create-cluster:
-    kind create cluster --config=dev/kind-config.yaml
-
-# Install ingress controller
-install-ingress:
-    kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
-    kubectl wait --namespace ingress-nginx \
-        --for=condition=ready pod \
-        --selector=app.kubernetes.io/component=controller \
-        --timeout=90s
-
 # Deploy VRE using skaffold
+# Requires kubectl to already point at the target cluster/context.
 deploy:
     skaffold run
 
@@ -66,12 +55,12 @@ show-version:
     @grep "^version:" vre/Chart.yaml
 
 list-users:
-    REANA_ACCESS_TOKEN=$(kubectl get secrets  escape-vre-admin-access-token -o 'jsonpath={.data.ADMIN_ACCESS_TOKEN}' | base64 -d) && \
-    kubectl exec -i -t deployment/escape-vre-server -- flask reana-admin user-list --admin-access-token $REANA_ACCESS_TOKEN
+    REANA_ACCESS_TOKEN=$(kubectl get secrets -n escape-vre escape-vre-admin-access-token -o 'jsonpath={.data.ADMIN_ACCESS_TOKEN}' | base64 -d) && \
+    kubectl exec -n escape-vre -i -t deployment/escape-vre-server -- flask reana-admin user-list --admin-access-token $REANA_ACCESS_TOKEN
 
 token-grant email:
-    REANA_ACCESS_TOKEN=$(kubectl get secrets  escape-vre-admin-access-token -o 'jsonpath={.data.ADMIN_ACCESS_TOKEN}' | base64 -d) && \
-    kubectl exec -i -t deployment/escape-vre-server -- flask reana-admin token-grant --email {{email}} --admin-access-token $REANA_ACCESS_TOKEN
+    REANA_ACCESS_TOKEN=$(kubectl get secrets -n escape-vre escape-vre-admin-access-token -o 'jsonpath={.data.ADMIN_ACCESS_TOKEN}' | base64 -d) && \
+    kubectl exec -n escape-vre -i -t deployment/escape-vre-server -- flask reana-admin token-grant --email {{email}} --admin-access-token $REANA_ACCESS_TOKEN
 
 # Default recipe (show available commands)
 default:

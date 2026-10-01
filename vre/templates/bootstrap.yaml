@@ -64,14 +64,12 @@ spec:
           fi
           
 
-          # Add token to secrets
-          if kubectl -n "${kubernetes_namespace}" create secret generic "${instance_name}"-admin-access-token \
-                --from-literal=ADMIN_ACCESS_TOKEN="${admin_access_token}"; then
-                echo "Secret created successfully."
-          else
-                echo "Secret already exists, skipping creation."
-                admin_access_token=$(kubectl -n "${kubernetes_namespace}" get secret "${instance_name}"-admin-access-token -o jsonpath='{.data.ADMIN_ACCESS_TOKEN}' | base64 -d)
-          fi
+          # Add token to secrets. The secret is not owned by Helm, so it outlives an
+          # uninstall while the database does not: always overwrite it with the token
+          # that was just minted, otherwise a stale token is served to users.
+          kubectl -n "${kubernetes_namespace}" create secret generic "${instance_name}"-admin-access-token \
+                --from-literal=ADMIN_ACCESS_TOKEN="${admin_access_token}" \
+                --dry-run=client -o yaml | kubectl -n "${kubernetes_namespace}" apply -f -
 
           echo "Success! You may now set the following environment variables:"
           echo ""
