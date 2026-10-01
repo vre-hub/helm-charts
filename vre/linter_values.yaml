@@ -1,0 +1,42 @@
+# Dummy values, enough to render the chart for linting. Not for deployment:
+# excluded from the packaged chart by .helmignore.
+bootstrap:
+  reanaAdminEmail: lint@example.invalid
+  reanaAdminPassword: lint-only-not-a-real-password
+jupyterhub:
+  hub:
+    config:
+      RucioAuthenticator:
+        client_id: lint-only
+        client_secret: lint-only
+        oauth_callback_url: https://jhub.lint.invalid/hub/oauth_callback
+  ingress:
+    hosts:
+    - jhub.lint.invalid
+  singleuser:
+    extraEnv:
+      RUCIO_BASE_URL: https://rucio.lint.invalid
+      RUCIO_AUTH_URL: https://rucio-auth.lint.invalid
+reana:
+  secrets:
+    login:
+      iam:
+        consumer_key: lint-only
+        consumer_secret: lint-only
+  reana_hostname: reana.lint.invalid
+# the chart ships these disabled, render them so their values get linted
+grafana:
+  enabled: true
+prometheus:
+  enabled: true
+loki:
+  enabled: true
+fluent-bit:
+  enabled: true
+rucioClientSetup:
+  oidc:
+    issuer: lint-only
+npdb:
+  postgresql:
+    auth:
+      password: lint-only-not-a-real-password
