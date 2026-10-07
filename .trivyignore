@@ -1,0 +1,18 @@
+# namespace is picked at install time, a chart cannot set it
+KSV-0110
+
+# registry comes from bootstrap.image, that is the operator's call
+KSV-0125
+
+# the bootstrap Job exists to exec into reana-server and stash the admin token,
+# so these two are the job, not a misconfiguration
+KSV-0053
+KSV-0113
+
+# the pre-delete Job scales the REANA workloads down and deletes singleuser pods
+# so nothing holds an NFS mount during uninstall, that is the job as well
+KSV-0048
+
+# the rucio client setup ConfigMap holds a shell script that reads the token
+# from RUCIO_ACCESS_TOKEN at runtime, it stores no credential of its own
+KSV-0109

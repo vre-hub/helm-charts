@@ -1,0 +1,3 @@
+# neither belongs in a published chart, values-custom.yaml holds real credentials
+linter_values.yaml
+values-custom.yaml

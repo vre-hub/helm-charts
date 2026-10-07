@@ -20,15 +20,22 @@ repos:
       args:
         - "--chart-dir=vre"
 
-  - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.29.4
+  - repo: local
     hooks:
-    - id: check-jsonschema
+    - id: kubeconform
       name: Validate Helm templates with kubeconform
-      files: ^vre/templates/.*\.yaml$
-      types: [yaml]
-      entry: bash -c '
-        helm template vre ./vre | kubeconform -strict -ignore-missing-schemas -summary -output pretty - '
+      files: &render_inputs ^(vre/|scripts/|\.trivyignore|\.pre-commit-config\.yaml$)
+      exclude: &skip_docs ^vre/README\.md$
+      entry: bash -o pipefail -c '
+        mkdir -p "$HOME/.cache/kubeconform";
+        helm template vre ./vre -f vre/linter_values.yaml --kube-version 1.31.0 | kubeconform -strict -ignore-missing-schemas -kubernetes-version 1.31.0 -cache "$HOME/.cache/kubeconform" -summary -output pretty - '
+      language: system
+      pass_filenames: false
 
+    - id: trivy-config
+      name: Scan the chart for misconfiguration
+      files: *render_inputs
+      exclude: *skip_docs
+      entry: ./scripts/scan.sh
       language: system
       pass_filenames: false
