@@ -6,7 +6,7 @@
 bootstrap:
   # Credentials for the initial admin user of REANA. These are used only during the first deployment.
   reanaAdminEmail: "admin@example.com"
-  reanaAdminPassword: "replace-with-a-strong-password"
+  reanaAdminPassword:
 
 jupyterhub:
   hub:
@@ -116,12 +116,10 @@ reana:
         consumer_key:
         consumer_secret:
 
-    # REANA database credentials: unset = the reana subchart falls back to dev
-    # defaults. In production manage the `<release-name>-db-secrets` Kubernetes
-    # secret directly instead of setting credentials here.
-    # database:
-    #   user:
-    #   password:
+    message_broker:
+      password:
+    reana:
+      REANA_SECRET_KEY:
 
   # -- Domain name for the REANA ingress. REANA generates its OIDC callback
   # from this: register https://<reana_hostname>/oauth/authorized/keycloak/
@@ -163,7 +161,7 @@ nfs-server-provisioner:
 npdb:
   postgresql:
     auth:
-      password: replace-with-a-strong-password
+      password:
   files:
     authentication:
       # IAM userinfo endpoint used to authenticate npdb file access

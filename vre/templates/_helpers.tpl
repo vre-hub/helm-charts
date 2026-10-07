@@ -114,6 +114,22 @@ and values that must embed the Helm release name.
 {{- end -}}
 {{- end -}}
 
+{{- $reanaDefaults := list -}}
+{{- with .Values.reana.secrets -}}
+{{- if has (dig "database" "password" "" . | default "") (list "" "reana") -}}
+{{- $reanaDefaults = append $reanaDefaults "reana.secrets.database.password" -}}
+{{- end -}}
+{{- if has (dig "message_broker" "password" "" . | default "") (list "" "1234") -}}
+{{- $reanaDefaults = append $reanaDefaults "reana.secrets.message_broker.password" -}}
+{{- end -}}
+{{- if has (dig "reana" "REANA_SECRET_KEY" "" . | default "") (list "" "secret_key") -}}
+{{- $reanaDefaults = append $reanaDefaults "reana.secrets.reana.REANA_SECRET_KEY" -}}
+{{- end -}}
+{{- end -}}
+{{- if $reanaDefaults -}}
+{{- $warnings = append $warnings (printf "REANA still uses the default value for %s. See \"Credentials\" in the README." (join ", " $reanaDefaults)) -}}
+{{- end -}}
+
 {{- if $warnings -}}
 {{- range $warnings }}
 WARNING: {{ . }}

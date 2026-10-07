@@ -294,9 +294,11 @@ The server URLs are therefore defined once, in
 | reana.quota.default_cpu_limit | int | `36000000` |  |
 | reana.quota.default_disk_limit | int | `10737418240` |  |
 | reana.reana_hostname | string | `nil` | Required: REANA ingress host; register `https://<reana_hostname>/oauth/authorized/keycloak/` in your IAM client |
-| reana.secrets.database | object | `{}` | Unset = subchart falls back to dev defaults; in production manage the `<release-name>-db-secrets` secret directly |
+| reana.secrets.database | object | `{}` | Leave unset on install, see "Credentials" in the README |
 | reana.secrets.login.iam.consumer_key | string | `nil` |  |
 | reana.secrets.login.iam.consumer_secret | string | `nil` |  |
+| reana.secrets.message_broker.password | string | `nil` |  |
+| reana.secrets.reana.REANA_SECRET_KEY | string | `nil` |  |
 | reana.shared_storage.access_modes | string | `"ReadWriteMany"` |  |
 | reana.shared_storage.backend | string | `"nfs"` |  |
 | reana.shared_storage.volume_size | int | `1` |  |

@@ -319,14 +319,12 @@ reana:
         consumer_key:
         consumer_secret:
 
-    # Initial credentials for the REANA database when installed by the reana-db
-    # subchart. Left unset following upstream reana convention: the subchart's
-    # secret template falls back to reana/reana (dev convenience). Production
-    # deployments should manage the `<release-name>-db-secrets` Kubernetes
-    # secret directly instead of setting credentials in values files.
-    # -- Unset = subchart falls back to dev defaults; in production manage the
-    # `<release-name>-db-secrets` secret directly
+    # -- Leave unset on install, see "Credentials" in the README
     database: {}
+    message_broker:
+      password:
+    reana:
+      REANA_SECRET_KEY:
 
   components:
     reana_ui:

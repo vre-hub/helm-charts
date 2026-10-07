@@ -46,6 +46,41 @@
 {{- end }}
 {{- end }}
 
-{{- if and .Values.npdb.enabled (eq .Values.npdb.postgresql.auth.password "change-me") }}
+{{- if and .Values.npdb.enabled (not (dig "postgresql" "auth" "existingSecret" "" .Values.npdb)) }}
+{{- $npdbPassword := dig "postgresql" "auth" "password" "" .Values.npdb }}
+{{- if not $npdbPassword }}
+{{- fail "npdb.postgresql.auth.password must be set, or npdb.postgresql.auth.existingSecret" }}
+{{- end }}
+{{- if eq $npdbPassword "change-me" }}
 {{- fail "npdb.postgresql.auth.password must be changed from the default 'change-me'" }}
+{{- end }}
+{{- end }}
+
+{{- if .Release.IsInstall }}
+{{- $defaults := list "defaultpassword" "replace-with-a-strong-password" "change-me" "1234" "secret_key" }}
+
+{{- if and (dig "components" "reana_db" "enabled" true .Values.reana) (not (dig "debug" "enabled" false .Values.reana)) }}
+{{- $db := dig "database" dict .Values.reana.secrets | default dict }}
+{{- if or (not (has (dig "user" "" $db | default "") (list "" "reana"))) (not (has (dig "password" "" $db | default "") (list "" "reana"))) }}
+{{- fail "reana.secrets.database must be left unset on install, the bundled REANA database always starts as reana/reana. Change it after install, see \"Credentials\" in the README" }}
+{{- end }}
+{{- end }}
+
+{{- if and .Values.bootstrap.enabled (has .Values.bootstrap.reanaAdminPassword $defaults) }}
+{{- fail "bootstrap.reanaAdminPassword is set to a known example value, choose your own" }}
+{{- end }}
+
+{{- if and .Values.npdb.enabled (not (dig "postgresql" "auth" "existingSecret" "" .Values.npdb)) (has (dig "postgresql" "auth" "password" "" .Values.npdb) $defaults) }}
+{{- fail "npdb.postgresql.auth.password is set to a known example value, choose your own" }}
+{{- end }}
+
+{{- $broker := dig "message_broker" "password" "" .Values.reana.secrets }}
+{{- if or (not $broker) (has $broker $defaults) }}
+{{- fail "reana.secrets.message_broker.password must be set, otherwise REANA uses the default password \"1234\"" }}
+{{- end }}
+
+{{- $key := dig "reana" "REANA_SECRET_KEY" "" .Values.reana.secrets }}
+{{- if or (not $key) (has $key $defaults) }}
+{{- fail "reana.secrets.reana.REANA_SECRET_KEY must be set, otherwise REANA uses the default key \"secret_key\"" }}
+{{- end }}
 {{- end }}

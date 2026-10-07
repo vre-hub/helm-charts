@@ -41,6 +41,45 @@ If you want to see development versions, you can do:
 helm search repo vre-helm-charts/escape-vre --versions --devel
 ```
 
+### Credentials
+
+Set these before installing. The install fails if any of them is empty or a known default.
+
+| Value | Used for |
+| --- | --- |
+| `bootstrap.reanaAdminPassword` | REANA admin user |
+| `reana.secrets.message_broker.password` | REANA message broker |
+| `reana.secrets.reana.REANA_SECRET_KEY` | REANA sessions and stored tokens |
+| `npdb.postgresql.auth.password` | npdb database, not needed if `npdb.postgresql.auth.existingSecret` is set |
+| `jupyterhub.hub.config.RucioAuthenticator.client_id`, `client_secret` | IAM client for JupyterHub |
+| `reana.secrets.login.iam.consumer_key`, `consumer_secret` | IAM client for REANA |
+
+Keep them in a Kubernetes Secret and pass them in with Flux `valuesFrom` rather than writing them into `values-custom.yaml`.
+
+The bundled REANA database always starts with user and password `reana`, so leave `reana.secrets.database` unset on install and change it afterwards as below.
+
+#### Changing a password on an existing install
+
+`helm upgrade` only warns about default credentials. The REANA database and message broker keep the password they were first started with, so change it inside the service first:
+
+```bash
+kubectl -n escape-vre exec deployment/escape-vre-db -- psql -U reana -c "ALTER USER reana WITH PASSWORD 'new-password';"
+kubectl -n escape-vre exec statefulset/escape-vre-message-broker -- rabbitmqctl change_password test 'new-password'
+```
+
+Then set the new values, run `helm upgrade` and restart REANA right away. The bootstrap job keeps failing until the restart.
+
+```bash
+kubectl -n escape-vre rollout restart deployment/escape-vre-server deployment/escape-vre-workflow-controller
+```
+
+`REANA_SECRET_KEY` also encrypts the tokens stored in the database. After changing it and restarting, re-encrypt them with the old key (`secret_key` if it was never set):
+
+```bash
+kubectl -n escape-vre exec deployment/escape-vre-server -c rest-api -- reana-db migrate-secret-key --old-key 'old-key'
+kubectl -n escape-vre exec deployment/escape-vre-server -c rest-api -- flask instance migrate-secret-key --old-key 'old-key'
+```
+
 ### Example deployment
 
 An example installation command with custom values could look like this:

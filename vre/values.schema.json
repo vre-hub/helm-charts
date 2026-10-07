@@ -1,7 +1,100 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
+    "definitions": {
+        "enabled": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "image": {
+            "type": "object",
+            "properties": {
+                "repository": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "pullPolicy": {
+                    "type": "string",
+                    "enum": ["Always", "IfNotPresent", "Never"]
+                }
+            }
+        }
+    },
     "properties": {
+        "bootstrap": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "image": {
+                    "$ref": "#/definitions/image"
+                },
+                "initImage": {
+                    "$ref": "#/definitions/image"
+                },
+                "reanaAdminEmail": {
+                    "type": ["string", "null"],
+                    "description": "Email of the REANA admin user created on first install."
+                },
+                "reanaAdminPassword": {
+                    "type": ["string", "null"],
+                    "description": "Password of the REANA admin user created on first install."
+                }
+            }
+        },
+        "jupyterhub": {
+            "$ref": "#/definitions/enabled"
+        },
+        "reana": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "reana_hostname": {
+                    "type": ["string", "null"]
+                },
+                "secrets": {
+                    "type": "object",
+                    "properties": {
+                        "database": {
+                            "type": ["object", "null"],
+                            "properties": {
+                                "password": {
+                                    "type": ["string", "null"],
+                                    "description": "REANA database password. Leave unset on install."
+                                }
+                            }
+                        },
+                        "message_broker": {
+                            "type": ["object", "null"],
+                            "properties": {
+                                "password": {
+                                    "type": ["string", "null"],
+                                    "description": "REANA message broker password. Required on install."
+                                }
+                            }
+                        },
+                        "reana": {
+                            "type": ["object", "null"],
+                            "properties": {
+                                "REANA_SECRET_KEY": {
+                                    "type": ["string", "null"],
+                                    "description": "Signs REANA sessions and encrypts stored tokens. Required on install."
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "nfs-server-provisioner": {
             "type": "object",
             "properties": {
@@ -11,7 +104,95 @@
                     "description": "Enable or disable the NFS server provisioner."
                 }
             }
+        },
+        "grafana": {
+            "$ref": "#/definitions/enabled"
+        },
+        "prometheus": {
+            "$ref": "#/definitions/enabled"
+        },
+        "loki": {
+            "$ref": "#/definitions/enabled"
+        },
+        "fluent-bit": {
+            "$ref": "#/definitions/enabled"
+        },
+        "npdb": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "postgresql": {
+                    "type": "object",
+                    "properties": {
+                        "auth": {
+                            "type": "object",
+                            "properties": {
+                                "password": {
+                                    "type": ["string", "null"],
+                                    "description": "npdb database password. Not needed when existingSecret is set."
+                                },
+                                "existingSecret": {
+                                    "type": ["string", "null"]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "crm": {
+            "$ref": "#/definitions/enabled"
+        },
+        "rucioClientSetup": {
+            "type": "object",
+            "properties": {
+                "configMapName": {
+                    "type": "string"
+                },
+                "oidc": {
+                    "type": "object",
+                    "properties": {
+                        "issuer": {
+                            "type": ["string", "null"]
+                        },
+                        "polling": {
+                            "type": ["string", "boolean"]
+                        },
+                        "refreshActivate": {
+                            "type": ["string", "boolean"]
+                        }
+                    }
+                },
+                "additionalServers": {
+                    "type": "array"
+                }
+            }
+        },
+        "condaSetup": {
+            "type": "object",
+            "properties": {
+                "configMapName": {
+                    "type": "string"
+                }
+            }
+        },
+        "rcloneMount": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "readOnly": {
+                    "type": "boolean"
+                },
+                "reclaimPolicy": {
+                    "type": "string",
+                    "enum": ["Retain", "Delete", "Recycle"]
+                }
+            }
         }
-   },
+    },
     "required": []
 }
