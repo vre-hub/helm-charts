@@ -37,30 +37,54 @@ data:
     echo "source $HOME/.bashrc" >> "$profile_file"
 
     # --- Optional: provision a named conda environment ---
+    # Messages an admin should see go to the container's stdout as well
+    # (hook output itself is not part of `kubectl logs`).
+    notify() {
+      echo "$*"
+      echo "postStart_conda: $*" > /proc/1/fd/1 2>/dev/null || true
+    }
+
+    # Runs as an && chain so that one failure stops the chain and reports
+    # false, without tripping `set -e`: a failed provisioning must not make
+    # this hook exit non-zero, or the kubelet kills the user's server.
+    provision_env() {
+      echo "Creating conda environment..."
+      wget "${CONDA_ENV_SOURCE_URL}" -O conda_env_original.yaml \
+      && { if [ -n "${CONDA_PKGS_EXCLUDE:-}" ]; then
+             grep -vE "${CONDA_PKGS_EXCLUDE}" conda_env_original.yaml > conda_env.yaml
+           else
+             cp conda_env_original.yaml conda_env.yaml
+           fi; } \
+      && CONDA_DOWNLOAD_THREADS=1 CONDA_EXTRACT_THREADS=1 \
+           conda env create --file conda_env.yaml --name "${CONDA_ENV_NAME}" --quiet \
+      && { jupyter kernelspec remove --force "${CONDA_ENV_NAME}" >/dev/null 2>&1 || true; } \
+      && conda run --name "${CONDA_ENV_NAME}" python -m pip install ipykernel \
+      && conda run --name "${CONDA_ENV_NAME}" python -m ipykernel install --user --name "${CONDA_ENV_NAME}" --display-name "${CONDA_ENV_NAME}"
+    }
+
     if [ -n "${CONDA_ENV_SOURCE_URL:-}" ]; then
       : "${CONDA_ENV_NAME:?CONDA_ENV_NAME must be set when CONDA_ENV_SOURCE_URL is given}"
 
       kernel_dir="$HOME/.local/share/jupyter/kernels/${CONDA_ENV_NAME}"
       if [ -d "$kernel_dir" ]; then
         echo "Conda environment and kernel already exist, skipping creation."
+        echo "conda activate ${CONDA_ENV_NAME}" >> "$profile_file"
       else
-        echo "Creating conda environment..."
-        wget "${CONDA_ENV_SOURCE_URL}" -O conda_env_original.yaml
-        if [ -n "${CONDA_PKGS_EXCLUDE:-}" ]; then
-          grep -vE "${CONDA_PKGS_EXCLUDE}" conda_env_original.yaml > conda_env.yaml
-        else
-          cp conda_env_original.yaml conda_env.yaml
+        # No kernel registered: an earlier start may have been killed
+        # mid-creation (hub start timeout) and left a partial env. conda
+        # refuses to create over an existing prefix, so clear it first.
+        leftover="$conda_envs_dir/${CONDA_ENV_NAME}"
+        if [ -d "$leftover" ]; then
+          notify "Removing leftover environment directory $leftover (no kernel registered)"
+          rm -rf "$leftover"
         fi
-
-        CONDA_DOWNLOAD_THREADS=1 CONDA_EXTRACT_THREADS=1 \
-          conda env create --file conda_env.yaml --name "${CONDA_ENV_NAME}" --quiet
-
-        jupyter kernelspec remove --force "${CONDA_ENV_NAME}" >/dev/null 2>&1 || true
-        conda run --name "${CONDA_ENV_NAME}" python -m pip install ipykernel
-        conda run --name "${CONDA_ENV_NAME}" python -m ipykernel install --user --name "${CONDA_ENV_NAME}" --display-name "${CONDA_ENV_NAME}"
+        if provision_env; then
+          echo "conda activate ${CONDA_ENV_NAME}" >> "$profile_file"
+        else
+          notify "WARNING: creating conda environment '${CONDA_ENV_NAME}' failed;" \
+                 "the session starts without it. See /tmp/postStart_conda.log."
+        fi
       fi
-
-      echo "conda activate ${CONDA_ENV_NAME}" >> "$profile_file"
     else
       echo "No conda env source configured (CONDA_ENV_SOURCE_URL is empty), skipping env creation."
     fi

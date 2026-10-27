@@ -30,6 +30,18 @@ Missing required values fail fast at render time (`templates/validation.yaml`);
 softer cross-value inconsistencies are reported as WARNING lines in the
 post-install notes (also shown by `skaffold run`).
 
+### Upgrades that change the singleuser image
+
+The JupyterHub subchart's pre-upgrade hook (`prePuller.hook`) waits until the
+new singleuser image is pulled onto every node before the upgrade proceeds.
+The singleuser images can be several GB in size, so give Helm more than its
+5-minute default, for example `helm upgrade --timeout 20m` or
+`spec.timeout: 20m` on a Flux `HelmRelease`; otherwise the hook times out, the
+upgrade is marked failed and, under Flux, nothing retries unless
+`spec.upgrade.remediation` is set.
+Setting `jupyterhub.prePuller.hook.enabled=false` avoids the wait, at the cost
+of the first user on each node waiting for the pull at spawn time.
+
 ## Release name assumptions
 
 Several default values assume the Helm release is named `escape-vre`. Subchart
