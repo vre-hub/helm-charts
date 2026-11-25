@@ -100,14 +100,15 @@ The server URLs are therefore defined once, in
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | bootstrap.enabled | bool | `true` |  |
+| bootstrap.existingSecret | string | `""` | Name of an existing Secret with keys `email` and `password` for the REANA admin. When set, `reanaAdminEmail` and `reanaAdminPassword` are ignored and the chart creates no admin Secret of its own. |
 | bootstrap.image.pullPolicy | string | `"IfNotPresent"` |  |
 | bootstrap.image.repository | string | `"alpine/k8s"` |  |
 | bootstrap.image.tag | string | `"1.30.14"` |  |
 | bootstrap.initImage.pullPolicy | string | `"IfNotPresent"` |  |
 | bootstrap.initImage.repository | string | `"postgres"` |  |
 | bootstrap.initImage.tag | string | `"17.5"` |  |
-| bootstrap.reanaAdminEmail | string | `nil` |  |
-| bootstrap.reanaAdminPassword | string | `nil` |  |
+| bootstrap.reanaAdminEmail | string | `nil` | REANA admin email; required unless `bootstrap.existingSecret` is set |
+| bootstrap.reanaAdminPassword | string | `nil` | REANA admin password; required unless `bootstrap.existingSecret` is set |
 | condaSetup.configMapName | string | `"conda-setup"` |  |
 | crm.enabled | bool | `false` |  |
 | crm.namespace | string | `"monitoring"` |  |

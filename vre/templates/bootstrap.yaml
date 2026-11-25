@@ -1,9 +1,14 @@
 {{ if .Values.bootstrap.enabled }}
+{{- $adminSecret := .Values.bootstrap.existingSecret | default (printf "%s-bootstrap-admin" (include "escape-vre.fullname" .)) }}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ include "escape-vre.fullname" . }}-bootstrap-{{ .Release.Revision }}
 spec:
+  # The script waits for the server itself, so retries only cover transient
+  # errors; the deadline caps the whole Job, as for the pre-delete Job.
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
   template:
     spec:
       restartPolicy: Never
@@ -23,7 +28,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: {{ include "escape-vre.fullname" . }}-db-secrets
-              key: password        
+              key: password
         args:
         - |
           set -ex
@@ -35,34 +40,71 @@ spec:
                 sleep 5
           done
 
-          echo "REANA database is ready." 
+          echo "REANA database is ready."
 
       containers:
       - name: bootstrap
         image: "{{ .Values.bootstrap.image.repository }}:{{ .Values.bootstrap.image.tag }}"
-        imagePullPolicy: {{ .Values.bootstrap.imagePullPolicy }}  
+        imagePullPolicy: {{ .Values.bootstrap.imagePullPolicy }}
         command: ["/bin/sh", "-c"]
+        # The admin credentials come from a Secret rather than being pasted
+        # into this spec, where anyone allowed to read Jobs could see them.
+        env:
+        - name: ADMIN_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: {{ $adminSecret }}
+              key: email
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ $adminSecret }}
+              key: password
         args:
         - |
-          set -ex
+          # No `set -x`: the trace printed the admin password and the
+          # admin access token into the Job log.
+          set -e
           echo "Bootstrapping REANA..."
-          
+
           kubernetes_namespace={{ .Release.Namespace }}
           instance_name={{ include "escape-vre.fullname" . }}
-          admin_email={{ .Values.bootstrap.reanaAdminEmail | default "admin@example.com" }}
-          admin_password={{ .Values.bootstrap.reanaAdminPassword }}
+          server="deployment/${instance_name}-server"
 
-          
-          kubectl exec -it deployment/${instance_name}-server  -- ./scripts/create-database.sh || echo "Database already exists, skipping creation."
+          # The init container waits for the database, not for the server:
+          # without this, the first exec can run before the rest-api
+          # container exists and the Job only succeeds on a retry.
+          # Returns as soon as the server is ready; the timeout only bounds
+          # a server that never starts.
+          echo "Waiting for the REANA server..."
+          kubectl -n "${kubernetes_namespace}" rollout status "${server}" --timeout=300s
+
+          kubectl -n "${kubernetes_namespace}" exec "${server}" -c rest-api -- \
+                ./scripts/create-database.sh || echo "Database already exists, skipping creation."
 
           # Create admin user
-          if ! admin_access_token=$(kubectl -n "${kubernetes_namespace}" exec "deployment/${instance_name}-server" -c rest-api -- \
-                flask reana-admin create-admin-user --email "${admin_email}" --password "${admin_password}"); then
+          if ! admin_access_token=$(kubectl -n "${kubernetes_namespace}" exec "${server}" -c rest-api -- \
+                flask reana-admin create-admin-user --email "${ADMIN_EMAIL}" --password "${ADMIN_PASSWORD}"); then
                 # Output failures
                 echo "${admin_access_token}"
                 exit 1
           fi
-          
+
+          # When the admin already exists (every upgrade), create-admin-user
+          # exits 0 and prints nothing: keep the stored token rather than
+          # overwriting it with an empty one. Anything that is not a single
+          # word is not a token: do not store it.
+          case "${admin_access_token}" in
+            "")
+                echo "REANA admin already exists; keeping the token in Secret ${instance_name}-admin-access-token."
+                exit 0
+                ;;
+            *[[:space:]]*)
+                echo "create-admin-user printed something other than a token; not storing it."
+                exit 1
+                ;;
+          esac
+
 
           # Add token to secrets. The secret is not owned by Helm, so it outlives an
           # uninstall while the database does not: always overwrite it with the token
@@ -71,12 +113,19 @@ spec:
                 --from-literal=ADMIN_ACCESS_TOKEN="${admin_access_token}" \
                 --dry-run=client -o yaml | kubectl -n "${kubernetes_namespace}" apply -f -
 
-          echo "Success! You may now set the following environment variables:"
-          echo ""
-          echo "  $ export REANA_SERVER_URL=https://localhost:30443  # or use your URL"
-          echo "  $ export REANA_ACCESS_TOKEN=${admin_access_token}"
-          echo ""
+          echo "Success! The REANA admin access token is stored in the Secret"
+          echo "${instance_name}-admin-access-token (key ADMIN_ACCESS_TOKEN)."
           echo "Please see http://docs.reana.io/getting-started/ on how to run your first REANA example."
-
+{{- if not .Values.bootstrap.existingSecret }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $adminSecret }}
+type: Opaque
+stringData:
+  email: {{ .Values.bootstrap.reanaAdminEmail | quote }}
+  password: {{ .Values.bootstrap.reanaAdminPassword | quote }}
+{{- end }}
 
 {{end}}
