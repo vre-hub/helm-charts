@@ -62,7 +62,21 @@ spec:
                 echo "${admin_access_token}"
                 exit 1
           fi
-          
+
+          # When the admin already exists (every upgrade), create-admin-user
+          # exits 0 and prints nothing: keep the stored token rather than
+          # overwriting it with an empty one. Anything that is not a single
+          # word is not a token: do not store it.
+          case "${admin_access_token}" in
+            "")
+                echo "REANA admin already exists; keeping the token in Secret ${instance_name}-admin-access-token."
+                exit 0
+                ;;
+            *[[:space:]]*)
+                echo "create-admin-user printed something other than a token; not storing it."
+                exit 1
+                ;;
+          esac
 
           # Add token to secrets. The secret is not owned by Helm, so it outlives an
           # uninstall while the database does not: always overwrite it with the token
