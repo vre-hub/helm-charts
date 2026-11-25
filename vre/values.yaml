@@ -10,8 +10,14 @@ bootstrap:
     tag: "17.5"
     pullPolicy: IfNotPresent
 
+  # -- REANA admin email; required unless `bootstrap.existingSecret` is set
   reanaAdminEmail:
+  # -- REANA admin password; required unless `bootstrap.existingSecret` is set
   reanaAdminPassword:
+  # -- Name of an existing Secret with keys `email` and `password` for the
+  # REANA admin. When set, `reanaAdminEmail` and `reanaAdminPassword` are
+  # ignored and the chart creates no admin Secret of its own.
+  existingSecret: ""
 
 jupyterhub:
   enabled: true

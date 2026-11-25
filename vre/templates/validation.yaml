@@ -1,9 +1,11 @@
+{{- if not .Values.bootstrap.existingSecret }}
 {{- if not .Values.bootstrap.reanaAdminPassword }}
-{{- fail "bootstrap.reanaAdminPassword must be set in values" }}
+{{- fail "bootstrap.reanaAdminPassword must be set in values (or set bootstrap.existingSecret)" }}
 {{- end }}
 
 {{- if not .Values.bootstrap.reanaAdminEmail }}
-{{- fail "bootstrap.reanaAdminEmail must be set in values" }}
+{{- fail "bootstrap.reanaAdminEmail must be set in values (or set bootstrap.existingSecret)" }}
+{{- end }}
 {{- end }}
 
 {{- if not .Values.jupyterhub.hub.config.RucioAuthenticator.client_id }}
