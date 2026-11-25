@@ -1,4 +1,5 @@
-# {{ include "escape-vre.fullname" . }}-bootstrap-sa sa allowed to do all operations. not amazon specific
+# {{ include "escape-vre.fullname" . }}-bootstrap-sa: service account of the bootstrap
+# Job and the pre-delete Job, limited to what their scripts do.
 
 apiVersion: v1
 kind: ServiceAccount
@@ -11,9 +12,30 @@ kind: Role
 metadata:
   name: {{ include "escape-vre.fullname" . }}-bootstrap-role
 rules:
-- apiGroups: ["*"]
-  resources: ["*"]
-  verbs: ["*"]
+# Both Jobs: find the REANA and npdb workloads and their pods
+# (bootstrap: rollout status, exec deployment/...; pre-delete: wait for delete).
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "delete"]
+# Bootstrap: run REANA's admin commands in the server.
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+# Bootstrap: store the minted admin token. Create cannot be limited by name.
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["{{ include "escape-vre.fullname" . }}-admin-access-token"]
+  verbs: ["get", "patch"]
+# Pre-delete: scale REANA and npdb down before their volumes go.
+- apiGroups: ["apps"]
+  resources: ["deployments/scale", "statefulsets/scale"]
+  verbs: ["get", "update", "patch"]
 ---
 # {{ include "escape-vre.fullname" . }}-bootstrap-role-binding
 apiVersion: rbac.authorization.k8s.io/v1
